@@ -13,6 +13,14 @@
 #include <shellapi.h>
 #include <shlobj.h>
 #include <shlwapi.h>
+#include <wct.h>
+
+#ifndef WCT_MAX_NODE_COUNT
+#define WCT_MAX_NODE_COUNT 16
+#endif
+#ifndef WCTP_GETINFO_ALL_FLAGS
+#define WCTP_GETINFO_ALL_FLAGS 0x7 // WCT_OUT_OF_PROC_FLAG | WCT_OUT_OF_PROC_COM_FLAG | WCT_OUT_OF_PROC_CS_FLAG
+#endif
 
 #include <algorithm>
 
@@ -477,6 +485,58 @@ void Properties(App& app, const ProcSample& p) {
     SHObjectProperties(app.Hwnd(), SHOP_FILEPATH, p.meta->path.c_str(), nullptr);
 }
 
+void RestartExplorer(App& app, const ProcSample& p) {
+    if (!app.Confirm(L"Restart Windows Explorer?", L"The taskbar, desktop and File Explorer windows will disappear briefly and then reload.", L"Restart"))
+        return;
+    std::wstring why;
+    DWORD e = TerminateProcessId(p.pid, p.createTime, why);
+    if (e) { ReportFailure(app, L"Restarting Windows Explorer", e, why); return; }
+    Sleep(500);
+    wchar_t win[MAX_PATH];
+    GetWindowsDirectoryW(win, MAX_PATH);
+    ShellExecuteW(nullptr, L"open", (std::wstring(win) + L"\\explorer.exe").c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    app.ShowStatus(L"Windows Explorer restarted");
+}
+
+// Wait Chain Traversal (documented in wct.h): shows which threads are blocked and on what.
+void AnalyzeWaitChain(App& app, const ProcSample& p) {
+    uint32_t pid = p.pid;
+    std::wstring name = p.Name();
+    auto out = std::make_shared<std::wstring>();
+    worker::Run([pid, out] {
+        HWCT session = OpenThreadWaitChainSession(0, nullptr);
+        if (!session) { *out = L"Wait chain analysis is unavailable: " + LastErrorMessage(); return; }
+        int blocked = 0, deadlocks = 0;
+        for (auto& t : QueryThreads(pid)) {
+            WAITCHAIN_NODE_INFO nodes[WCT_MAX_NODE_COUNT];
+            DWORD count = WCT_MAX_NODE_COUNT;
+            BOOL cycle = FALSE;
+            if (!GetThreadWaitChain(session, 0, WCTP_GETINFO_ALL_FLAGS, t.tid, &count, nodes, &cycle) || count < 2) continue;
+            ++blocked;
+            if (cycle) ++deadlocks;
+            std::wstring line = L"Thread " + std::to_wstring(t.tid);
+            for (DWORD i = 1; i < count && i < 8; ++i) {
+                auto& n = nodes[i];
+                if (n.ObjectType == WctThreadType)
+                    line += L" \u2192 thread " + std::to_wstring(n.ThreadObject.ThreadId) + L" (PID " + std::to_wstring(n.ThreadObject.ProcessId) + L")";
+                else {
+                    static const wchar_t* types[] = {L"", L"critical section", L"SendMessage", L"mutex", L"ALPC", L"COM", L"thread wait", L"process wait",
+                                                     L"thread", L"COM activation", L"unknown", L"socket", L"SMB I/O"};
+                    int ty = static_cast<int>(n.ObjectType);
+                    line += std::wstring(L" \u2192 ") + (ty >= 0 && ty < 13 ? types[ty] : L"object");
+                    if (n.LockObject.ObjectName[0]) line += std::wstring(L" '") + n.LockObject.ObjectName + L"'";
+                }
+            }
+            if (cycle) line += L"  [DEADLOCK]";
+            *out += line + L"\n";
+            if (out->size() > 6000) { *out += L"\u2026"; break; }
+        }
+        CloseThreadWaitChainSession(session);
+        if (!blocked) *out = L"No thread is waiting on another thread, process or lock. The process is not blocked by a wait chain.";
+        else *out = std::to_wstring(blocked) + L" blocked thread(s)" + (deadlocks ? L", " + std::to_wstring(deadlocks) + L" in a deadlock cycle" : L"") + L":\n\n" + *out;
+    }, [&app, name, out] { app.Info(L"Wait chain for " + name, *out); });
+}
+
 void ProcessContextMenu(App& app, const ProcSample& pIn, bool detailsView) {
     ProcSample p = pIn; // copy: the snapshot may change while the menu is open
     bool app_ = p.mainWindow != nullptr;
@@ -510,6 +570,10 @@ void ProcessContextMenu(App& app, const ProcSample& pIn, bool detailsView) {
     copy.sub = {{30, L"Name"}, {31, L"PID"}, {32, L"Path", false, hasPath}, {33, L"Command line", false, p.meta && !p.meta->commandLine.empty()}};
     items.push_back(copy);
     items.push_back({15, L"Properties", false, hasPath});
+    items.push_back(MenuItem::Sep());
+    items.push_back({16, L"Analyze wait chain..."});
+    bool explorer = _wcsicmp(p.Name().c_str(), L"explorer.exe") == 0;
+    if (explorer) items.insert(items.begin(), MenuItem{17, L"Restart"});
     UINT c = app.ShowMenu(items);
     switch (c) {
     case 1: SwitchToProcessWindow(p.mainWindow); break;
@@ -537,6 +601,8 @@ void ProcessContextMenu(App& app, const ProcSample& pIn, bool detailsView) {
     case 31: CopyTextToClipboard(app.Hwnd(), std::to_wstring(p.pid)); break;
     case 32: if (hasPath) CopyTextToClipboard(app.Hwnd(), p.meta->path); break;
     case 33: if (p.meta) CopyTextToClipboard(app.Hwnd(), p.meta->commandLine); break;
+    case 16: AnalyzeWaitChain(app, p); break;
+    case 17: RestartExplorer(app, p); break;
     default: break;
     }
 }

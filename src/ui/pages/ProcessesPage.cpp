@@ -55,6 +55,7 @@ public:
         std::wstring v = app.Config().GetString("processes.view", L"grouped");
         view_ = v == L"tree" ? 1 : v == L"flat" ? 2 : 0;
         highlight_ = app.Config().GetBool("processes.highlight", true);
+        percent_ = app.Config().GetBool("processes.percent", false);
     }
 
     const wchar_t* Title() const override { return L"Processes"; }
@@ -98,6 +99,7 @@ public:
         app.Config().SetString("processes.layout", table_.SaveLayout());
         app.Config().SetString("processes.view", view_ == 1 ? L"tree" : view_ == 2 ? L"flat" : L"grouped");
         app.Config().SetBool("processes.highlight", highlight_);
+        app.Config().SetBool("processes.percent", percent_);
     }
     std::wstring AccessibleSummary() const override {
         std::wstring s = L"Processes, " + std::to_wstring(snap_ ? snap_->cpu.processes : 0) + L" processes.";
@@ -182,9 +184,15 @@ public:
         case CProcName: if (p && p->meta) out = p->meta->name; break;
         case CCmd: if (p && p->meta && single) out = p->meta->commandLine; break;
         case CCpu: out = FormatPercent(row.cpu, row.cpu < 10 && row.cpu > 0 ? 1 : 0); break;
-        case CMem: out = FormatMB(row.mem); break;
+        case CMem:
+            out = percent_ && snap_ && snap_->mem.total ? FormatPercent(100.0 * row.mem / snap_->mem.total, 1) : FormatMB(row.mem);
+            break;
         case CDisk: out = FormatRateBytes(row.io); break;
-        case CNet: out = row.net >= 0 ? FormatNetRate(row.net, app.NetUnits()) : L"—"; break;
+        case CNet:
+            if (row.net < 0) out = L"\u2014";
+            else if (percent_ && linkCapacityBps_ > 0) out = FormatPercent(100.0 * row.net * 8 / linkCapacityBps_, 1);
+            else out = FormatNetRate(row.net, app.NetUnits());
+            break;
         case CGpu: out = FormatPercent(row.gpu, row.gpu < 10 && row.gpu > 0 ? 1 : 0); break;
         case CGpuEngine:
             if (p && p->gpuEngine != GpuEngineType::None && row.gpu > 0) out = L"GPU " + std::to_wstring(p->gpuAdapter) + L" - " + GpuEngineTypeName(p->gpuEngine);
@@ -237,6 +245,7 @@ public:
             double rate = 0, cap = 0;
             for (auto& n : s.nics) { rate += (n.sendBps + n.recvBps) * 8; if (n.connected) cap += std::max(n.speedRx, n.speedTx); }
             table_.columns[CNet].header2 = cap > 0 ? FormatPercent(100.0 * rate / cap) : L"0%";
+            linkCapacityBps_ = cap;
             float gmax = 0;
             for (auto& gp : s.gpus) gmax = std::max(gmax, gp.util);
             table_.columns[CGpu].header2 = s.gpuCollected ? FormatPercent(gmax) : L"";
@@ -267,9 +276,10 @@ private:
     }
 
     void ViewMenu() {
-        UINT c = app.ShowMenu({{1, L"Highlight new and exited processes", highlight_}, {2, L"Compact rows", table_.compact}, {3, L"Heat-map shading", table_.heatMap},
+        UINT c = app.ShowMenu({{7, L"Show memory and network as percentages", percent_}, {1, L"Highlight new and exited processes", highlight_}, {2, L"Compact rows", table_.compact}, {3, L"Heat-map shading", table_.heatMap},
                                MenuItem::Sep(), {4, L"Choose columns..."}, {5, L"Expand all"}, {6, L"Collapse all"}});
         if (c == 1) highlight_ = !highlight_;
+        if (c == 7) percent_ = !percent_;
         if (c == 2) table_.compact = !table_.compact;
         if (c == 3) table_.heatMap = !table_.heatMap;
         if (c == 4) ColumnMenu(app, table_);
@@ -613,7 +623,8 @@ private:
     ProcessFilter filter_;
     std::wstring filterError_;
     int view_ = 0;
-    bool highlight_ = true;
+    bool highlight_ = true, percent_ = false;
+    double linkCapacityBps_ = 0;
     size_t visibleProcs_ = 0;
 };
 

@@ -1,6 +1,8 @@
 // Performance page: Task Manager's CPU / Memory / Disk / Network / GPU views with extended data.
 #include "ui/pages/Common.h"
 
+#include <shellapi.h>
+
 #include <map>
 
 namespace nx {
@@ -116,6 +118,7 @@ private:
                                {4, L"Summary view", summary_},
                                {5, L"Copy\tCtrl+C"},
                                MenuItem::Sep(),
+                               {8, L"Open Resource Monitor"},
                                {6, L"Export session history (CSV)..."},
                                {7, L"Export session history (JSON)..."}});
         if (c == 1) logical_ = false;
@@ -125,6 +128,7 @@ private:
         if (c == 5) { CopyTextToClipboard(app.Hwnd(), copyText_); app.ShowStatus(L"Copied performance summary"); }
         if (c == 6) app.ExportHistory(false);
         if (c == 7) app.ExportHistory(true);
+        if (c == 8) ShellExecuteW(app.Hwnd(), L"open", L"resmon.exe", nullptr, nullptr, SW_SHOWNORMAL);
     }
 
     // ------------------------------------------------------------------ device list

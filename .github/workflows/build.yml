@@ -1,0 +1,32 @@
+name: build
+on: [push, pull_request]
+jobs:
+  msvc:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DNEXUS_BUILD_TESTS=ON
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Unit tests
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Collector smoke test
+        run: |
+          .\build\Release\NEXUS.exe --bench bench.json 20 | Out-Null
+          Start-Sleep -Seconds 5
+          Get-Content bench.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NEXUS-msvc
+          path: build/Release/NEXUS.exe
+  mingw-cross:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build g++-mingw-w64-x86-64-posix nsis zip
+      - run: ./scripts/package.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NEXUS-dist
+          path: dist/*
