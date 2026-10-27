@@ -275,7 +275,8 @@ StorageHealth QueryStorageHealth(int index) {
         if (DeviceIoControl(hd.Get(), IOCTL_STORAGE_QUERY_PROPERTY, &q, sizeof q, b.data(), static_cast<DWORD>(b.size()), &ret, nullptr) &&
             ret >= sizeof(STORAGE_TEMPERATURE_DATA_DESCRIPTOR)) {
             auto* t = reinterpret_cast<STORAGE_TEMPERATURE_DATA_DESCRIPTOR*>(b.data());
-            if (t->InfoCount > 0) {
+            // Drivers that don't implement the sensor report 0 or garbage; accept only plausible values.
+            if (t->InfoCount > 0 && t->TemperatureInfo[0].Temperature > 0 && t->TemperatureInfo[0].Temperature < 150) {
                 h.temperatureC = t->TemperatureInfo[0].Temperature;
                 h.temperatureWarnC = t->WarningTemperature ? t->WarningTemperature : -1;
                 h.temperatureCritC = t->CriticalTemperature ? t->CriticalTemperature : -1;
@@ -309,7 +310,7 @@ StorageHealth QueryStorageHealth(int index) {
                 h.source = L"NVMe health information log";
                 h.criticalWarning = log[0];
                 uint16_t k = static_cast<uint16_t>(log[1] | (log[2] << 8));
-                if (k) h.temperatureC = k - 273.0;
+                if (k > 273 && k < 273 + 150) h.temperatureC = k - 273.0;
                 h.availableSpare = log[3];
                 h.spareThreshold = log[4];
                 h.percentUsed = log[5];

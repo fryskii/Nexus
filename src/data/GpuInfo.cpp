@@ -5,7 +5,6 @@
 #include <dxgi.h>
 #include <devpropdef.h>
 #include <setupapi.h>
-#include <devguid.h>
 
 #include <cstring>
 
@@ -15,6 +14,7 @@ static const DEVPROPKEY kDevDriverDate = {{0xa8b865dd, 0x2e3d, 0x4094, {0xad, 0x
 static const DEVPROPKEY kDevLocationInfo = {{0xa45c254e, 0xdf1c, 0x4efd, {0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0}}, 15};
 static const DEVPROPKEY kDevHardwareIds = {{0xa45c254e, 0xdf1c, 0x4efd, {0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0}}, 3};
 static const DEVPROPKEY kDevInstanceId = {{0x78c34fc8, 0x104a, 0x4aca, {0x9e, 0xa4, 0x52, 0x4d, 0x52, 0x99, 0x6e, 0x57}}, 256};
+static const GUID kDisplayClassGuid = {0x4d36e968, 0xe325, 0x11ce, {0xbf, 0xc1, 0x08, 0x00, 0x2b, 0xe1, 0x03, 0x18}}; // GUID_DEVCLASS_DISPLAY
 static const GUID kPciPropGuid = {0x3ab22e31, 0x8264, 0x4b4e, {0x9a, 0xf5, 0xa8, 0xd2, 0xd8, 0xe3, 0x3e, 0x62}};
 
 namespace nx {
@@ -182,7 +182,7 @@ std::vector<GpuStatic> QueryGpus() {
     }
 
     // Driver details and PCIe link from the device tree.
-    HDEVINFO set = SetupDiGetClassDevsW(&GUID_DEVCLASS_DISPLAY, nullptr, nullptr, DIGCF_PRESENT);
+    HDEVINFO set = SetupDiGetClassDevsW(&kDisplayClassGuid, nullptr, nullptr, DIGCF_PRESENT);
     if (set != INVALID_HANDLE_VALUE) {
         SP_DEVINFO_DATA dev{sizeof dev};
         for (DWORD i = 0; SetupDiEnumDeviceInfo(set, i, &dev); ++i) {

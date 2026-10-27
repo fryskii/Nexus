@@ -338,6 +338,8 @@ void App::SetPageHidden(PageId id, bool hidden) {
 }
 
 void App::UpdateDemand() {
+    // Window messages (WM_SIZE, WM_SHOWWINDOW) can arrive during creation, before these exist.
+    if (!sampler_ || !pages_[static_cast<int>(current_)]) return;
     uint32_t d = demand::Thermal; // cheap; used by overview and diagnostics
     bool visible = IsWindowVisible(hwnd_) && !IsIconic(hwnd_);
     if (visible) d |= pages_[static_cast<int>(current_)]->Demand();
@@ -766,6 +768,7 @@ void App::EnsureEventCounts() {
 void App::Paint() {
     PAINTSTRUCT ps;
     BeginPaint(hwnd_, &ps);
+    if (!sampler_ || !pages_[static_cast<int>(current_)]) { EndPaint(hwnd_, &ps); return; } // still creating
     if (!gfx_.Begin()) { EndPaint(hwnd_, &ps); return; }
     if (!ui_) ui_ = std::make_unique<Ui>(gfx_, theme_, input_);
     Ui& ui = *ui_;
@@ -1203,7 +1206,7 @@ LRESULT App::WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         if (tray_) tray_->Hide();
         if (mini_) mini_->Destroy();
         ProcessWindow::CloseAll();
-        sampler_->Stop();
+        if (sampler_) sampler_->Stop();
         worker::Shutdown();
         a11y::Detach(h);
         icons_.Shutdown();

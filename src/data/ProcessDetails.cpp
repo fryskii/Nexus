@@ -3,6 +3,7 @@
 #include "data/ProcessOps.h"
 #include "data/Processes.h"
 
+#include <bcrypt.h>
 #include <softpub.h>
 #include <wintrust.h>
 #include <mscat.h>

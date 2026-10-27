@@ -7,6 +7,7 @@
 #include <evntrace.h>
 #include <evntcons.h>
 
+#include <cstddef>
 #include <cstring>
 
 namespace nx {

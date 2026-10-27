@@ -15,7 +15,7 @@ LRESULT CALLBACK MiniProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     auto* self = reinterpret_cast<MiniMonitor*>(GetWindowLongPtrW(h, GWLP_USERDATA));
     return self ? self->Proc(h, m, w, l) : DefWindowProcW(h, m, w, l);
 }
-constexpr float kW = 250.f, kH = 172.f;
+constexpr float kW = 310.f, kH = 172.f;
 } // namespace
 
 MiniMonitor::~MiniMonitor() { Destroy(); }
@@ -84,8 +84,8 @@ void MiniMonitor::Paint() {
         float y = 10;
         auto row = [&](const wchar_t* label, const std::wstring& value, const RingBuffer<float>& data, float maxV, Color c) {
             gfx_.Text(label, {12, y, 60, 26}, Font::Small, t.textSecondary);
-            gfx_.Text(value, {64, y, 92, 26}, Font::BodySemi, t.text);
-            if (data.Size() > 1) GraphView::Spark(gfx_, {160, y + 4, 78, 18}, data, maxV, c);
+            gfx_.Text(value, {68, y, 148, 26}, Font::BodySemi, t.text);
+            if (data.Size() > 1) GraphView::Spark(gfx_, {222, y + 4, 76, 18}, data, maxV, c);
             y += 30;
         };
         if (snap) {

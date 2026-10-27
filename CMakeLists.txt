@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(NEXUS_BUILD_TESTS "Build unit tests" ON)
+option(NEXUS_STRIP "Strip symbols from release binaries (MinGW)" ON)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
@@ -94,7 +95,7 @@ if(WIN32)
   else()
     target_compile_options(nexus PRIVATE -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers
       -Wno-cast-function-type -municode)
-    target_link_options(nexus PRIVATE -municode -static -static-libgcc -static-libstdc++ -s)
+    target_link_options(nexus PRIVATE -municode -static -static-libgcc -static-libstdc++ $<$<BOOL:${NEXUS_STRIP}>:-s>)
   endif()
 endif()
 

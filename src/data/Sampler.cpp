@@ -12,6 +12,7 @@
 #include <psapi.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <cwchar>
 #include <map>
 
