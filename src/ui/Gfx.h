@@ -39,6 +39,7 @@ struct Rect {
 
 enum class Font : uint8_t { Body, BodySemi, Small, SmallSemi, Caption, Subtitle, Title, Display, StatValue, Icon, IconSmall, IconLarge, Mono, Count };
 enum class Align : uint8_t { Left, Center, Right };
+enum class MetricIcon : int8_t { None = -1, Cpu, Memory, Disk, Network, Gpu, Info, Bolt };
 
 class Gfx {
 public:
@@ -73,6 +74,23 @@ public:
     // Line/area chart of `n` values scaled to [0, maxValue]; values are oldest-first, right-aligned
     // to `capacity` slots so graphs scroll like Task Manager's.
     void Series(const Rect& r, const float* values, size_t n, size_t capacity, float maxValue, Color line, Color fill, float width = 1.f);
+
+    // Gradient fills. vertical=false gives a left-to-right gradient.
+    void FillGradient(const Rect& r, float radius, Color from, Color to, bool vertical = true);
+    // Soft radial glow (transparent at the edge).
+    void Glow(float cx, float cy, float rx, float ry, Color center);
+    // Rounded outline with a soft outer glow in the same colour.
+    void GlowStroke(const Rect& r, float radius, Color c, float strength = 1.f);
+    // Area chart whose fill fades from `fillTop` to transparent.
+    void SeriesGradient(const Rect& r, const float* values, size_t n, size_t capacity, float maxValue, Color line, Color fillTop, float width = 1.5f);
+    // Small vector glyphs that must not depend on icon fonts.
+    void Leaf(float x, float y, float size, Color c);
+    void Logo(const Rect& r, Color from, Color to);
+    void Chevron(float cx, float cy, float size, bool down, Color c, float width = 1.4f);
+    // Line-art hardware icons drawn in a square `r`.
+    void DrawIcon(MetricIcon icon, const Rect& r, Color c, float width = 1.5f);
+    // Rounded tile with a tinted gradient and the icon centred in it.
+    void IconTile(MetricIcon icon, const Rect& r, Color tint, bool dark);
 
     void PushClip(const Rect& r);
     void PopClip();

@@ -68,6 +68,7 @@ public:
     float Scroll(WidgetId id, const Rect& viewport, float contentHeight, float& offset);
 
     void Card(const Rect& r, bool hover = false);
+    void Panel(const Rect& r, Color tint, bool glow);
     void Tooltip(WidgetId id, const std::wstring& text);
     void Defer(std::function<void()> fn) { deferred_.push_back(std::move(fn)); }
     std::vector<std::function<void()>> TakeDeferred() { return std::move(deferred_); }

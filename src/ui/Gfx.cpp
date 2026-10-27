@@ -244,6 +244,194 @@ void Gfx::Series(const Rect& r, const float* v, size_t n, size_t capacity, float
     rt_->DrawGeometry(lg.Get(), Brush(line), width);
 }
 
+void Gfx::FillGradient(const Rect& r, float radius, Color from, Color to, bool vertical) {
+    if (r.w <= 0 || r.h <= 0) return;
+    D2D1_GRADIENT_STOP stops[2] = {{0.f, from.D2D()}, {1.f, to.D2D()}};
+    ComPtr<ID2D1GradientStopCollection> coll;
+    if (FAILED(rt_->CreateGradientStopCollection(stops, 2, coll.Put()))) return;
+    ComPtr<ID2D1LinearGradientBrush> br;
+    D2D1_POINT_2F a{r.x, r.y}, b = vertical ? D2D1_POINT_2F{r.x, r.B()} : D2D1_POINT_2F{r.R(), r.y};
+    if (FAILED(rt_->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties(a, b), coll.Get(), br.Put()))) return;
+    if (radius > 0) rt_->FillRoundedRectangle(D2D1::RoundedRect(r.D2D(), radius, radius), br.Get());
+    else rt_->FillRectangle(r.D2D(), br.Get());
+}
+
+void Gfx::Glow(float cx, float cy, float rx, float ry, Color center) {
+    // Stacked translucent ellipses: a smooth falloff that renders identically on every Direct2D
+    // implementation (and avoids creating gradient resources every frame).
+    const int steps = 14;
+    float a = center.a / steps * 1.6f;
+    for (int i = 0; i < steps; ++i) {
+        float f = 1.f - static_cast<float>(i) / steps;
+        float k = std::sqrt(f);
+        rt_->FillEllipse(D2D1::Ellipse({cx, cy}, rx * k, ry * k), Brush(center.Alpha(a * (0.35f + 0.65f * (1.f - f)))));
+    }
+}
+
+void Gfx::GlowStroke(const Rect& r, float radius, Color c, float strength) {
+    // Layered translucent outlines approximate a blur without requiring Direct2D effects.
+    for (int i = 3; i >= 1; --i) {
+        float d = i * 1.6f;
+        Rect o{r.x - d, r.y - d, r.w + 2 * d, r.h + 2 * d};
+        StrokeRound(o, radius + d, c.Alpha(c.a * 0.10f * strength / i), 1.6f);
+    }
+    StrokeRound(r, radius, c, 1.f);
+}
+
+void Gfx::SeriesGradient(const Rect& r, const float* v, size_t n, size_t capacity, float maxValue, Color line, Color fillTop, float width) {
+    if (n < 2 || capacity < 2 || maxValue <= 0 || r.w <= 2) return;
+    n = std::min(n, capacity);
+    const float dx = r.w / static_cast<float>(capacity - 1);
+    const float x0 = r.R() - dx * static_cast<float>(n - 1);
+    auto y = [&](float val) { return r.B() - std::clamp(val / maxValue, 0.f, 1.f) * (r.h - 2) - 1; };
+    ComPtr<ID2D1PathGeometry> fillGeo, lineGeo;
+    ComPtr<ID2D1GeometrySink> s1, s2;
+    if (FAILED(factory_->CreatePathGeometry(fillGeo.Put())) || FAILED(fillGeo->Open(s1.Put()))) return;
+    if (FAILED(factory_->CreatePathGeometry(lineGeo.Put())) || FAILED(lineGeo->Open(s2.Put()))) return;
+    s1->BeginFigure({x0, r.B()}, D2D1_FIGURE_BEGIN_FILLED);
+    s2->BeginFigure({x0, y(v[0])}, D2D1_FIGURE_BEGIN_HOLLOW);
+    for (size_t i = 0; i < n; ++i) {
+        D2D1_POINT_2F p{x0 + dx * static_cast<float>(i), y(v[i])};
+        s1->AddLine(p);
+        if (i) s2->AddLine(p);
+    }
+    s1->AddLine({r.R(), r.B()});
+    s1->EndFigure(D2D1_FIGURE_END_CLOSED);
+    s2->EndFigure(D2D1_FIGURE_END_OPEN);
+    s1->Close();
+    s2->Close();
+    D2D1_GRADIENT_STOP stops[2] = {{0.f, fillTop.D2D()}, {1.f, fillTop.Alpha(0).D2D()}};
+    ComPtr<ID2D1GradientStopCollection> coll;
+    ComPtr<ID2D1LinearGradientBrush> br;
+    if (SUCCEEDED(rt_->CreateGradientStopCollection(stops, 2, coll.Put())) &&
+        SUCCEEDED(rt_->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties({r.x, r.y}, {r.x, r.B()}), coll.Get(), br.Put())))
+        rt_->FillGeometry(fillGeo.Get(), br.Get());
+    rt_->DrawGeometry(lineGeo.Get(), Brush(line), width);
+}
+
+void Gfx::Leaf(float x, float y, float s, Color c) {
+    // A leaf pointing to the upper right, with a vein: drawn as geometry so it never depends on fonts.
+    ComPtr<ID2D1PathGeometry> geo;
+    ComPtr<ID2D1GeometrySink> sink;
+    if (FAILED(factory_->CreatePathGeometry(geo.Put())) || FAILED(geo->Open(sink.Put()))) return;
+    sink->BeginFigure({x + s * 0.12f, y + s * 0.88f}, D2D1_FIGURE_BEGIN_HOLLOW);
+    sink->AddBezier(D2D1::BezierSegment({x + s * 0.0f, y + s * 0.30f}, {x + s * 0.55f, y + s * 0.05f}, {x + s * 0.95f, y + s * 0.05f}));
+    sink->AddBezier(D2D1::BezierSegment({x + s * 0.95f, y + s * 0.50f}, {x + s * 0.70f, y + s * 0.95f}, {x + s * 0.12f, y + s * 0.88f}));
+    sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+    sink->BeginFigure({x + s * 0.05f, y + s * 0.98f}, D2D1_FIGURE_BEGIN_HOLLOW);
+    sink->AddLine({x + s * 0.62f, y + s * 0.40f});
+    sink->EndFigure(D2D1_FIGURE_END_OPEN);
+    sink->Close();
+    rt_->DrawGeometry(geo.Get(), Brush(c), std::max(1.f, s / 11.f));
+}
+
+void Gfx::Logo(const Rect& r, Color from, Color to) {
+    float rad = r.w * 0.24f;
+    FillGradient(r, rad, from, to, false);
+    ComPtr<ID2D1PathGeometry> geo;
+    ComPtr<ID2D1GeometrySink> sink;
+    if (FAILED(factory_->CreatePathGeometry(geo.Put())) || FAILED(geo->Open(sink.Put()))) return;
+    auto P = [&](float fx, float fy) { return D2D1_POINT_2F{r.x + r.w * fx, r.y + r.h * fy}; };
+    sink->BeginFigure(P(0.14f, 0.60f), D2D1_FIGURE_BEGIN_HOLLOW);
+    const float pts[][2] = {{0.32f, 0.60f}, {0.41f, 0.35f}, {0.52f, 0.78f}, {0.62f, 0.45f}, {0.69f, 0.60f}, {0.86f, 0.60f}};
+    for (auto& p : pts) sink->AddLine(P(p[0], p[1]));
+    sink->EndFigure(D2D1_FIGURE_END_OPEN);
+    sink->Close();
+    ComPtr<ID2D1StrokeStyle> style;
+    factory_->CreateStrokeStyle(D2D1::StrokeStyleProperties(D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND, D2D1_LINE_JOIN_ROUND), nullptr, 0,
+                                style.Put());
+    rt_->DrawGeometry(geo.Get(), Brush(Color{1, 1, 1, 1}), std::max(1.5f, r.w * 0.08f), style.Get());
+}
+
+void Gfx::Chevron(float cx, float cy, float s, bool down, Color c, float width) {
+    ComPtr<ID2D1PathGeometry> geo;
+    ComPtr<ID2D1GeometrySink> sink;
+    if (FAILED(factory_->CreatePathGeometry(geo.Put())) || FAILED(geo->Open(sink.Put()))) return;
+    float h = s / 2;
+    if (down) {
+        sink->BeginFigure({cx - h, cy - h / 2}, D2D1_FIGURE_BEGIN_HOLLOW);
+        sink->AddLine({cx, cy + h / 2});
+        sink->AddLine({cx + h, cy - h / 2});
+    } else {
+        sink->BeginFigure({cx - h / 2, cy - h}, D2D1_FIGURE_BEGIN_HOLLOW);
+        sink->AddLine({cx + h / 2, cy});
+        sink->AddLine({cx - h / 2, cy + h});
+    }
+    sink->EndFigure(D2D1_FIGURE_END_OPEN);
+    sink->Close();
+    ComPtr<ID2D1StrokeStyle> style;
+    factory_->CreateStrokeStyle(D2D1::StrokeStyleProperties(D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND, D2D1_LINE_JOIN_ROUND), nullptr, 0,
+                                style.Put());
+    rt_->DrawGeometry(geo.Get(), Brush(c), width, style.Get());
+}
+
+void Gfx::DrawIcon(MetricIcon icon, const Rect& r, Color c, float w) {
+    float x = r.x, y = r.y, s = std::min(r.w, r.h);
+    auto P = [&](float fx, float fy) { return D2D1_POINT_2F{x + s * fx, y + s * fy}; };
+    auto line = [&](float x1, float y1, float x2, float y2) { rt_->DrawLine(P(x1, y1), P(x2, y2), Brush(c), w); };
+    auto rrect = [&](float x1, float y1, float x2, float y2, float rad) {
+        D2D1_ROUNDED_RECT rr = D2D1::RoundedRect({x + s * x1, y + s * y1, x + s * x2, y + s * y2}, s * rad, s * rad);
+        rt_->DrawRoundedRectangle(rr, Brush(c), w);
+    };
+    switch (icon) {
+    case MetricIcon::Cpu:
+        rrect(0.22f, 0.22f, 0.78f, 0.78f, 0.08f);
+        rrect(0.38f, 0.38f, 0.62f, 0.62f, 0.03f);
+        for (float f : {0.36f, 0.5f, 0.64f}) {
+            line(f, 0.08f, f, 0.22f); line(f, 0.78f, f, 0.92f);
+            line(0.08f, f, 0.22f, f); line(0.78f, f, 0.92f, f);
+        }
+        break;
+    case MetricIcon::Memory:
+        rrect(0.10f, 0.28f, 0.90f, 0.64f, 0.05f);
+        for (float f : {0.30f, 0.50f, 0.70f}) rrect(f - 0.06f, 0.37f, f + 0.06f, 0.52f, 0.01f);
+        for (float f : {0.2f, 0.35f, 0.5f, 0.65f, 0.8f}) line(f, 0.64f, f, 0.76f);
+        break;
+    case MetricIcon::Disk:
+        rrect(0.16f, 0.18f, 0.84f, 0.82f, 0.12f);
+        line(0.16f, 0.58f, 0.84f, 0.58f);
+        rt_->FillEllipse(D2D1::Ellipse(P(0.68f, 0.70f), s * 0.045f, s * 0.045f), Brush(c));
+        line(0.28f, 0.70f, 0.48f, 0.70f);
+        break;
+    case MetricIcon::Network:
+        rt_->DrawEllipse(D2D1::Ellipse(P(0.5f, 0.24f), s * 0.11f, s * 0.11f), Brush(c), w);
+        rt_->DrawEllipse(D2D1::Ellipse(P(0.24f, 0.74f), s * 0.11f, s * 0.11f), Brush(c), w);
+        rt_->DrawEllipse(D2D1::Ellipse(P(0.76f, 0.74f), s * 0.11f, s * 0.11f), Brush(c), w);
+        line(0.45f, 0.34f, 0.30f, 0.64f); line(0.55f, 0.34f, 0.70f, 0.64f); line(0.35f, 0.74f, 0.65f, 0.74f);
+        break;
+    case MetricIcon::Gpu:
+        rrect(0.08f, 0.26f, 0.92f, 0.70f, 0.06f);
+        rt_->DrawEllipse(D2D1::Ellipse(P(0.36f, 0.48f), s * 0.13f, s * 0.13f), Brush(c), w);
+        rt_->DrawEllipse(D2D1::Ellipse(P(0.68f, 0.48f), s * 0.13f, s * 0.13f), Brush(c), w);
+        line(0.20f, 0.70f, 0.20f, 0.82f); line(0.80f, 0.70f, 0.80f, 0.82f);
+        break;
+    case MetricIcon::Info:
+        rt_->DrawEllipse(D2D1::Ellipse(P(0.5f, 0.5f), s * 0.40f, s * 0.40f), Brush(c), w);
+        line(0.5f, 0.46f, 0.5f, 0.72f);
+        rt_->FillEllipse(D2D1::Ellipse(P(0.5f, 0.32f), s * 0.05f, s * 0.05f), Brush(c));
+        break;
+    case MetricIcon::Bolt: {
+        ComPtr<ID2D1PathGeometry> geo;
+        ComPtr<ID2D1GeometrySink> sink;
+        if (FAILED(factory_->CreatePathGeometry(geo.Put())) || FAILED(geo->Open(sink.Put()))) return;
+        sink->BeginFigure(P(0.58f, 0.06f), D2D1_FIGURE_BEGIN_FILLED);
+        for (auto pt : {P(0.22f, 0.56f), P(0.48f, 0.56f), P(0.40f, 0.94f), P(0.78f, 0.42f), P(0.52f, 0.42f)}) sink->AddLine(pt);
+        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+        sink->Close();
+        rt_->FillGeometry(geo.Get(), Brush(c));
+        break;
+    }
+    default: break;
+    }
+}
+
+void Gfx::IconTile(MetricIcon icon, const Rect& r, Color tint, bool dark) {
+    FillGradient(r, r.w * 0.28f, tint.Alpha(dark ? 0.55f : 0.22f), tint.Alpha(dark ? 0.22f : 0.10f));
+    StrokeRound(r, r.w * 0.28f, tint.Alpha(dark ? 0.55f : 0.35f));
+    float p = r.w * 0.2f;
+    DrawIcon(icon, {r.x + p, r.y + p, r.w - 2 * p, r.h - 2 * p}, dark ? Color{1, 1, 1, 0.95f} : tint, std::max(1.2f, r.w / 18.f));
+}
+
 void Gfx::PushClip(const Rect& r) {
     clips_.push_back(r);
     rt_->PushAxisAlignedClip(r.D2D(), D2D1_ANTIALIAS_MODE_ALIASED);

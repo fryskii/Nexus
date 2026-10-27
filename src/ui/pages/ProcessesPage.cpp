@@ -41,7 +41,7 @@ public:
             HeatCol("mem", L"Memory", 96, L"Private working set: physical memory used by the process that cannot be shared."),
             HeatCol("disk", L"Disk I/O", 92, L"File and device I/O rate (read + write) from kernel process counters. Includes cached file I/O, so it can exceed physical disk throughput."),
             HeatCol("net", L"Network", 92, L"TCP/UDP payload throughput per process from kernel network ETW events (administrator required)."),
-            HeatCol("gpu", L"GPU", 70, L"Busiest GPU engine used by the process (same method as Task Manager)."),
+            HeatCol("gpu", L"GPU", 70, L"Busiest GPU engine used by the process (same method as Task Manager)."),  // visibility set below
             Col("gpuengine", L"GPU engine", 110, Align::Left, false),
             HeatCol("power", L"Power usage", 104, L"NEXUS estimate from CPU, GPU, I/O and network activity. Not a measured wattage."),
             HeatCol("powertrend", L"Power usage trend", 130, L"Two-minute average of the power estimate."),
@@ -51,6 +51,11 @@ public:
             Col("arch", L"Architecture", 90, Align::Left, false),
         };
         table_.sortCol = -1;
+        // Default layout: Name, Status, CPU, Memory, Disk, Network (GPU and power are one right-click away).
+        for (int c : {CGpu, CPower, CPowerTrend}) table_.columns[c].visible = false;
+        table_.columns[CName].width = 260;
+        table_.columns[CStatus].width = 150;
+        table_.fillFirst = true;
         table_.LoadLayout(app.Config().GetString("processes.layout"));
         std::wstring v = app.Config().GetString("processes.view", L"grouped");
         view_ = v == L"tree" ? 1 : v == L"flat" ? 2 : 0;
@@ -66,7 +71,46 @@ public:
         return d;
     }
     bool HasSearch() const override { return true; }
-    const wchar_t* SearchHint() const override { return L"Search: name, PID, publisher, /regex/, cpu>5, mem>200MB"; }
+    bool ShowsInsights() const override { return true; }
+    std::wstring HeaderInfo() const override {
+        if (!filterError_.empty()) return filterError_;
+        return snap_ ? std::to_wstring(visibleProcs_) + L" of " + std::to_wstring(snap_->cpu.processes) + L" processes" : L"";
+    }
+    void HeaderExtras(Ui& ui, const Rect& r) override {
+        int sel = ui.Tabs(Id("proc.view"), {r.x, r.y + (r.h - 30) / 2, 230, 30}, {L"Grouped", L"Tree", L"Flat"}, view_);
+        if (sel >= 0 && sel != view_) { view_ = sel; Rebuild(); }
+    }
+    void HeaderActions(Ui& ui, float& right, float y, float h) override {
+        const ProcSample* sp = SelectedProc();
+        const Row* srow = SelectedRowPtr();
+        bool effOn = sp && sp->efficiencyMode;
+        bool effEnabled = sp && srow && sp->category != ProcCategory::Windows;
+        bool narrow = app.NarrowHeader();
+        float w = narrow ? 48.f : 168.f;
+        right -= w;
+        if (ui.Button(Id("proc.eff"), {right, y, w, h}, narrow ? L"" : effOn ? L"Efficiency: on" : L"Efficiency mode", 0xF003, ButtonStyle::Standard, effEnabled)) {
+            ProcSample c = *sp;
+            ui.Defer([this, c] { actions::ToggleEfficiency(app, c); });
+        }
+        if (narrow) ui.Tooltip(Id("proc.eff"), effOn ? L"Turn off efficiency mode" : L"Efficiency mode");
+        float ew = narrow ? 48.f : 120.f;
+        right -= 10 + ew;
+        bool canEnd = srow && srow->kind == 1;
+        if (ui.Button(Id("proc.end"), {right, y, ew, h}, narrow ? L"" : L"End task", 0xF002, ButtonStyle::Standard, canEnd)) ui.Defer([this] { EndSelected(); });
+        if (narrow) ui.Tooltip(Id("proc.end"), L"End task (Del)");
+        right -= 10;
+    }
+    void PageMenu(std::vector<MenuItem>& items) override {
+        MenuItem view{0, L"View"};
+        view.sub = {{501, L"Grouped", view_ == 0, true, false, true}, {502, L"Tree", view_ == 1, true, false, true}, {503, L"Flat", view_ == 2, true, false, true}};
+        items.push_back(view);
+        items.push_back({500, L"Process view options..."});
+    }
+    void OnPageMenu(UINT id) override {
+        if (id == 500) ViewMenu();
+        if (id >= 501 && id <= 503) { view_ = static_cast<int>(id - 501); Rebuild(); }
+    }
+    const wchar_t* SearchHint() const override { return L"Search processes, apps, or PID\u2026  (also cpu>5, mem>1GB, /regex/)"; }
     void OnSearch(const std::wstring& text) override {
         std::wstring err;
         filter_.Compile(text, &err);
@@ -126,11 +170,14 @@ public:
     uint64_t RowKey(size_t r) const override { return rows_[r].key; }
     bool RowIsGroup(size_t r) const override { return rows_[r].kind == 0; }
     int RowDepth(size_t r) const override { return rows_[r].depth; }
-    int RowExpander(size_t r) const override { return rows_[r].expander; }
+    int RowExpander(size_t r) const override {
+        if (rows_[r].kind == 0) return collapsedTree_.count(rows_[r].key) ? 1 : 2; // category headers
+        return rows_[r].expander;
+    }
     int RowHighlight(size_t r) const override {
         const Row& row = rows_[r];
         if (row.highlight) return row.highlight;
-        return row.suspended || row.efficiency ? 3 : 0;
+        return row.suspended ? 3 : 0;
     }
     void ToggleExpand(size_t r) override {
         uint64_t k = rows_[r].key;
@@ -146,9 +193,12 @@ public:
     Color CellColor(size_t r, int col, const Theme& t) const override {
         if (col == CStatus) {
             if (rows_[r].notResponding) return t.critical;
-            if (rows_[r].efficiency) return t.good;
+            if (rows_[r].efficiency) return t.textSecondary;
         }
-        return {};
+        return Color{0, 0, 0, 0};
+    }
+    int CellBadge(size_t r, int col) const override {
+        return col == CStatus && rows_[r].efficiency && !rows_[r].notResponding && !rows_[r].suspended ? 1 : 0;
     }
     float CellHeat(size_t r, int col) const override {
         const Row& row = rows_[r];
@@ -208,31 +258,18 @@ public:
 
     // ---- Drawing ----
     void Draw(Ui& ui, const Rect& area) override {
-        Gfx& g = ui.g;
         const Theme& t = ui.t;
         Rect r = area;
-        Rect bar = r.TakeTop(44);
-        int sel = ui.Tabs(Id("proc.view"), {bar.x, bar.y + 4, 300, 32}, {L"Grouped", L"Tree", L"Flat"}, view_);
-        if (sel >= 0 && sel != view_) { view_ = sel; Rebuild(); }
-        float bx = bar.R();
-        const ProcSample* sp = SelectedProc();
-        const Row* srow = SelectedRowPtr();
-        bool canEnd = srow && srow->kind == 1;
-        bx -= 116;
-        if (ui.Button(Id("proc.end"), {bx, bar.y + 4, 116, 32}, L"End task", 0xE711, ButtonStyle::Standard, canEnd)) ui.Defer([this] { EndSelected(); });
-        bx -= 158;
-        bool effOn = sp && sp->efficiencyMode;
-        bool effEnabled = sp && srow && srow->members.size() >= 1 && sp->category != ProcCategory::Windows;
-        if (ui.Button(Id("proc.eff"), {bx, bar.y + 4, 150, 32}, effOn ? L"Efficiency: on" : L"Efficiency mode", 0, ButtonStyle::Standard, effEnabled)) {
-            ProcSample c = *sp;
-            ui.Defer([this, c] { actions::ToggleEfficiency(app, c); });
+        // Metric pills in the header (icons and tints follow the theme).
+        struct { int col; MetricIcon icon; Color tint; bool always; } pills[] = {
+            {CCpu, MetricIcon::Cpu, t.cpu, true}, {CMem, MetricIcon::Memory, t.memory, true}, {CDisk, MetricIcon::Disk, t.disk, false},
+            {CNet, MetricIcon::Network, t.network, false}, {CGpu, MetricIcon::Gpu, t.gpu, false}};
+        for (auto& pl : pills) {
+            table_.columns[pl.col].icon = pl.icon;
+            table_.columns[pl.col].tint = pl.tint;
+            table_.columns[pl.col].heatAlways = pl.always;
+            table_.columns[pl.col].width = std::max(table_.columns[pl.col].width, 108.f);
         }
-        bx -= 44;
-        if (ui.IconButton(Id("proc.more"), {bx, bar.y + 4, 36, 32}, 0xE712, L"View options")) ui.Defer([this] { ViewMenu(); });
-        std::wstring info;
-        if (!filterError_.empty()) info = filterError_;
-        else if (snap_) info = std::to_wstring(visibleProcs_) + L" of " + std::to_wstring(snap_->cpu.processes) + L" processes";
-        g.Text(info, {bar.x + 310, bar.y, bx - bar.x - 320, 40}, Font::Small, filterError_.empty() ? t.textTertiary : t.critical);
 
         // Header totals like Task Manager.
         if (snap_) {
@@ -241,14 +278,14 @@ public:
             table_.columns[CMem].header2 = FormatPercent(s.mem.total ? 100.0 * s.mem.InUse() / s.mem.total : 0);
             float dmax = 0;
             for (auto& d : s.disks) dmax = std::max(dmax, d.activePct);
-            table_.columns[CDisk].header2 = s.diskCollected ? FormatPercent(dmax) : L"";
+            table_.columns[CDisk].header2 = s.diskCollected ? FormatPercent(dmax) : L"\u2014";
             double rate = 0, cap = 0;
             for (auto& n : s.nics) { rate += (n.sendBps + n.recvBps) * 8; if (n.connected) cap += std::max(n.speedRx, n.speedTx); }
             table_.columns[CNet].header2 = cap > 0 ? FormatPercent(100.0 * rate / cap) : L"0%";
             linkCapacityBps_ = cap;
             float gmax = 0;
             for (auto& gp : s.gpus) gmax = std::max(gmax, gp.util);
-            table_.columns[CGpu].header2 = s.gpuCollected ? FormatPercent(gmax) : L"";
+            table_.columns[CGpu].header2 = s.gpuCollected ? FormatPercent(gmax) : L"\u2014";
         }
         table_.compact = app.Compact() || table_.compact;
         if (table_.sortChanged) { table_.sortChanged = false; Rebuild(); }

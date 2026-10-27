@@ -29,6 +29,9 @@ enum class PageId : int { Overview, Processes, Performance, AppHistory, Startup,
 
 class Page;
 class App;
+
+struct NavEntry { PageId id; const wchar_t* name; wchar_t glyph; };
+extern const NavEntry kNavEntries[13];
 class Tray;
 class MiniMonitor;
 
@@ -146,6 +149,8 @@ public:
     HistoryRecorder& Recorder() { return recorder_; }
     void UpdateDemand();
     bool Compact() const { return compact_; }
+    // True when the page header has little room: pages show icon-only actions and move extras to the "..." menu.
+    bool NarrowHeader() const { return narrowHeader_; }
     void SetCompact(bool c);
     void RunNewTaskDialog();
     void ExportReport();
@@ -156,6 +161,10 @@ public:
     std::wstring ConfigDir() const { return configDir_; }
     void ShowFromTray();
     void ExitApp();
+    // Quick action: run NEXUS itself with EcoQoS and slower sampling.
+    void SetSelfEfficiency(bool on);
+    bool SelfEfficiency() const { return settings_.GetBool("app.efficiency", false); }
+    void ToggleInsights();
 
 private:
     void OnSnapshot();
@@ -164,10 +173,20 @@ private:
     void UpdateAppUsage(const Snapshot& s);
     void EvaluateDiagnostics();
     void Paint();
+    // Window chrome (Chrome.cpp): custom title bar, sidebar, page header, insights rail, toast.
+    void DrawBackground(float w, float h);
+    void DrawTitleBar(Ui& ui, Rect r);
+    void DrawCaptionButtons(Rect r);
     void DrawNav(Ui& ui, Rect r);
-    void DrawStatusBar(Ui& ui, Rect r);
-    void DrawTopBar(Ui& ui, Rect r);
+    void DrawHeader(Ui& ui, Rect r);
+    void DrawInsights(Ui& ui, Rect r);
+    void DrawToast(Rect content);
     void LayoutSearch(const Rect& r, bool visible);
+    void OverflowMenu();
+    bool InsightsVisible(float windowWidth) const;
+    LRESULT OnNcCalcSize(WPARAM wp, LPARAM lp);
+    LRESULT OnNcHitTest(LPARAM lp);
+    bool OnNcMouse(UINT msg, WPARAM wp, LPARAM lp);
     void OnDpiChanged(UINT dpi, const RECT* suggested);
     void HandleMouse(UINT msg, WPARAM wp, LPARAM lp);
     bool HandleKey(UINT vk);
@@ -210,6 +229,12 @@ private:
     HistoryRecorder recorder_;
     std::vector<std::function<void()>> deferred_;
     float navScroll_ = 0;
+    // Custom title bar state (DIPs, set while painting).
+    Rect capMin_, capMax_, capClose_, titleDrag_;
+    float titleH_ = 52.f;
+    int ncHover_ = 0, ncPressed_ = 0;   // HTMINBUTTON / HTMAXBUTTON / HTCLOSE
+    bool ncTracking_ = false;
+    bool narrowHeader_ = false;
     std::wstring searchText_;
     friend class Tray;
 };
@@ -232,6 +257,14 @@ public:
     virtual const wchar_t* SearchHint() const { return L"Search"; }
     virtual void OnSearch(const std::wstring& text) {}
     virtual bool OnKey(UINT vk, bool ctrl, bool shift) { return false; }
+    // Page header integration (title row of the content panel).
+    virtual bool ShowsInsights() const { return false; }      // show the right-hand insights rail
+    virtual std::wstring HeaderInfo() const { return L""; }   // small caption under the title
+    virtual void HeaderExtras(Ui& ui, const Rect& area) {}    // controls placed after the title
+    // Draws page actions right-to-left, starting at `right` (updated to the left edge used).
+    virtual void HeaderActions(Ui& ui, float& right, float y, float h) {}
+    virtual void PageMenu(std::vector<MenuItem>& items) {}    // extra entries in the "..." menu (ids 500-599)
+    virtual void OnPageMenu(UINT id) {}
     // Text that accessibility tools read for the page's current state.
     virtual std::wstring AccessibleSummary() const { return Title(); }
     virtual void SaveState() {}

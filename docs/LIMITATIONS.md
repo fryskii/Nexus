@@ -62,7 +62,7 @@ dialogs) are native and fully accessible. Everything is reachable by keyboard.
 
 ## Platform
 
-- Windows 10 1809 or later on x64. ARM64 builds are untested. Mica requires Windows 11 22H2 or later and falls back to a solid color.
+- Windows 10 1809 or later on x64. ARM64 builds are untested.
 - On systems without the *Segoe Fluent Icons* or *Segoe MDL2 Assets* fonts, icons render as boxes. Both fonts ship with Windows 10 and 11.
 
 ## Verification status

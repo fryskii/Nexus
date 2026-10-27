@@ -4,11 +4,25 @@
 
 Start `NEXUS.exe` from the Start menu or the portable folder. NEXUS runs as a standard user. Some information and actions need administrator rights:
 per-process network traffic, SMART data, the full partition table, other users' processes and stopping protected services.
-For these, use the shield button in the title area to restart as administrator. Single privileged actions, such as starting a service or enabling a
+For these, choose *Restart as administrator* in the "•••" menu at the top right of the page. Single privileged actions, such as starting a service or enabling a
 machine-wide startup app, show a UAC prompt for that action only.
 
 The sidebar switches between sections (Ctrl+1 … Ctrl+9). Right-click a sidebar item to hide it or make it the start page.
 Ctrl+B collapses the sidebar.
+
+### Window layout
+
+- **Title bar**: the NEXUS logo, an *Administrator* badge when elevated, and the search box ("Search processes, apps, or PID…").
+  Typing on a page without search switches to Processes. The window keeps the standard Windows 11 caption behaviour, including
+  snap layouts when you hover the maximize button.
+- **Page header**: the page title, *Run new task*, page actions, and the "•••" menu with pause/resume, refresh, update speed,
+  always on top, mini monitor, the insights panel, compact mode, page options, restart as administrator, export and settings.
+- **Insights panel** (Processes, when the window is at least about 1060 px wide): cards for CPU, memory, disk, network and GPU with
+  short graphs (click one to open it in Performance), system information (processes, threads, handles, uptime) and quick actions:
+  - *Efficiency mode*: runs NEXUS itself with EcoQoS and at least a 2-second update interval.
+  - *Dark mode*, *Always on top*, *Show details* (turns compact mode off).
+  Hide the panel from the "•••" menu. Values the system does not report show "—" rather than an estimate.
+- Status messages appear briefly as a pill at the bottom of the page. There is no separate status bar.
 
 ## Processes
 
@@ -16,13 +30,13 @@ Ctrl+B collapses the sidebar.
   processes* and *Windows processes* follow, and multiple instances of the same program are grouped. **Tree** shows the parent/child
   hierarchy. **Flat** lists every process.
 - Column headers show system totals. Click a header to sort, drag its edge to resize, drag it to reorder, and right-click it to choose columns.
-- Cell shading (heat map) shows relative load. Turn it off from the "…" menu.
+- Cell shading (heat map) shows relative load. Turn it off from the "•••" menu.
 - **Search** (Ctrl+F) supports plain text (name, description, publisher, PID) and these terms:
   - `pid:1234`, `ppid:4`, `name:`, `path:`, `pub:`, `user:`, `cmd:`
   - comparisons: `cpu>5`, `mem>500MB`, `gpu>10`, `io>1MB`, `threads>100`, `handles>5000`
   - regular expressions: `/chrom(e|ium)/` or `re:pattern`
   - negation: `!svchost`. All terms must match.
-- Actions are in the toolbar, the context menu (right-click or Shift+F10) and on keys:
+- Actions are in the page header (*End task*, *Efficiency mode*), the context menu (right-click or Shift+F10) and on keys:
   - End task (Del) and end process tree
   - Efficiency mode
   - Suspend / resume

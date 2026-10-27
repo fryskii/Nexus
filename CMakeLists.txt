@@ -31,6 +31,7 @@ if(WIN32)
   set(NEXUS_SOURCES
     src/main.cpp
     src/app/App.cpp
+    src/app/Chrome.cpp
     src/app/Commands.cpp
     src/app/Tray.cpp
     src/app/MiniMonitor.cpp

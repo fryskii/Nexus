@@ -33,6 +33,20 @@
 - The feature-parity audit against an installed Task Manager build.
 - Remaining parity gaps listed in docs/FEATURE_PARITY.md.
 
+## Visual redesign (Fluent "NEXUS" look)
+
+Implemented from the reference mockup:
+- Custom title bar (logo, admin badge, search pill, caption buttons with snap-layout support via `WM_NCHITTEST`), navy gradient
+  background with soft glows, glowing sidebar selection, rounded content panel.
+- Page header with *Run new task*, page actions and a "•••" overflow menu; the old toolbar and status bar are gone (status → toast).
+- Processes table: metric pills in the header, rounded group panels, block heat cells, leaf badge for efficiency mode,
+  columns that squeeze for narrow windows without losing saved widths.
+- Insights rail with tinted metric cards, system information and quick actions (NEXUS EcoQoS efficiency mode, dark mode, always on top, details).
+- Accent: NEXUS blue default, Windows accent or custom swatches. Mica setting removed (custom background).
+
+Verified only under Wine, which has no Segoe Fluent icon font (glyphs show as boxes) and seems to ignore gradient-stop alpha.
+To check on Windows 11: icon glyphs, gradient transparency, snap layouts, maximized frame insets, per-monitor DPI.
+
 ## Validation plan (next session on Windows 11)
 
 1. Build with MSVC: `scripts\build.ps1`. Fix any compiler differences; MinGW was the only compiler used so far.

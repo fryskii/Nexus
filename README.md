@@ -37,7 +37,7 @@ Also included:
 - **Installer**: `NEXUS-<version>-setup-x64.exe` adds Start-menu and optional desktop shortcuts, an uninstaller, and optionally sets NEXUS as the Task Manager replacement.
 - **Portable**: unzip `NEXUS-<version>-portable-x64.zip` and run `NEXUS.exe`. The `portable` file next to it keeps settings in that folder.
 
-Requires Windows 10 1809 or later on x64. It is designed for Windows 11, and Mica needs Windows 11 22H2 or later.
+Requires Windows 10 1809 or later on x64. It is designed for Windows 11.
 
 ## Documentation
 

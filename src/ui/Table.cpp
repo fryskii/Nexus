@@ -67,21 +67,65 @@ bool Table::OnKey(UINT vk, TableSource& src) {
     return true;
 }
 
+static float MinWidth(const TableColumn& c) { return c.icon != MetricIcon::None ? 84.f : 64.f; }
+
 void Table::Draw(Ui& ui, const Rect& r, TableSource& src) {
     EnsureOrder();
+    if (!fillFirst) { DrawImpl(ui, r, src); return; }
+    // When the panel is too narrow, squeeze the other columns for this frame only so the saved
+    // widths survive a temporary resize. A width changed by the user during the frame is kept.
+    int firstCol = -1;
+    float others = 0, shrinkable = 0;
+    for (int ci : order_) {
+        if (!columns[ci].visible) continue;
+        if (firstCol < 0) { firstCol = ci; continue; }
+        others += columns[ci].width;
+        shrinkable += std::max(0.f, columns[ci].width - MinWidth(columns[ci]));
+    }
+    float excess = others - (r.w - 16.f - 4.f - 160.f);
+    if (firstCol < 0 || excess <= 0 || shrinkable <= 0) { DrawImpl(ui, r, src); return; }
+    float k = std::min(1.f, excess / shrinkable);
+    std::vector<std::pair<float, float>> saved(columns.size()); // original, squeezed
+    for (size_t i = 0; i < columns.size(); ++i) {
+        auto& c = columns[i];
+        saved[i] = {c.width, c.width};
+        if (!c.visible || static_cast<int>(i) == firstCol) continue;
+        c.width -= std::max(0.f, c.width - MinWidth(c)) * k;
+        saved[i].second = c.width;
+    }
+    DrawImpl(ui, r, src);
+    for (size_t i = 0; i < columns.size(); ++i)
+        if (static_cast<int>(i) != firstCol && columns[i].width == saved[i].second) columns[i].width = saved[i].first;
+}
+
+void Table::DrawImpl(Ui& ui, const Rect& r, TableSource& src) {
     Gfx& g = ui.g;
     const Theme& t = ui.t;
-    const float headerH = columns.empty() ? 0 : (std::any_of(columns.begin(), columns.end(), [](const TableColumn& c) { return !c.header2.empty(); }) ? 46.f : 32.f);
+    bool pills = std::any_of(columns.begin(), columns.end(), [](const TableColumn& c) { return c.visible && c.icon != MetricIcon::None && !c.header2.empty(); });
+    const float headerH = columns.empty() ? 0 : (pills ? 66.f : 36.f);
+    const float gap = 8.f;
     const float rowH = RowHeight();
     Rect header{r.x, r.y, r.w, headerH};
-    Rect body{r.x, r.y + headerH, r.w, r.h - headerH};
+    Rect body{r.x, r.y + headerH + gap, r.w, r.h - headerH - gap};
     viewH_ = body.h;
+    const float pad = 8.f; // inner padding of the panels
+    // The first visible column (Name) flexes so the columns always fill the panel width.
+    if (fillFirst) {
+        int firstCol = -1;
+        float others = 0;
+        for (int ci : order_) {
+            if (!columns[ci].visible) continue;
+            if (firstCol < 0) firstCol = ci;
+            else others += columns[ci].width;
+        }
+        if (firstCol >= 0) columns[firstCol].width = std::max(160.f, r.w - 2 * pad - others - 4);
+    }
 
     // ---------------- Header ----------------
+    g.FillRound(header, 12.f, t.panel);
+    g.StrokeRound(header, 12.f, t.panelBorder);
     g.PushClip(header);
-    float x = r.x - 0;
-    float totalW = 0;
-    for (int ci : order_) if (columns[ci].visible) totalW += columns[ci].width;
+    float x = r.x + pad;
     for (size_t di = 0; di < order_.size(); ++di) {
         int ci = order_[di];
         auto& c = columns[ci];
@@ -92,18 +136,31 @@ void Table::Draw(Ui& ui, const Rect& r, TableSource& src) {
         Rect grip{cr.R() - 4, cr.y, 8, cr.h};
         bool gripHot = ui.Hit(gid, grip);
         bool hot = ui.Hit(hid, {cr.x, cr.y, cr.w - 4, cr.h});
-        if (hot && !gripHot) g.Fill(cr, t.surfaceHover);
         if (ui.Pressed(gid)) { resizing_ = ci; resizeStartX_ = ui.in.mx; resizeStartW_ = c.width; ui.SetActive(gid); }
         if (ui.Pressed(hid)) { dragging_ = static_cast<int>(di); dragStartX_ = ui.in.mx; }
-        Rect tr = cr.Inset(8, 0);
         bool sorted = sortCol == ci;
-        if (!c.header2.empty()) {
-            g.Text(c.header2, {tr.x, tr.y + 4, tr.w, 20}, Font::StatValue, t.text, c.align);
-            g.Text(c.title, {tr.x, tr.y + 24, tr.w, 18}, sorted ? Font::SmallSemi : Font::Small, sorted ? t.text : t.textSecondary, c.align);
+        if (c.icon != MetricIcon::None && !c.header2.empty() && pills) {
+            // Metric pill: icon tile, total value and label.
+            Rect pr{cr.x + 3, cr.y + 7, cr.w - 6, cr.h - 14};
+            Color tint = c.tint.a > 0 ? c.tint : t.accent;
+            g.FillGradient(pr, 12.f, t.surfaceAlt.Mix(tint, t.dark ? 0.10f : 0.04f), t.surface);
+            g.StrokeRound(pr, 12.f, sorted ? tint.Alpha(0.75f) : hot && !gripHot ? tint.Alpha(0.5f) : t.panelBorder);
+            float tile = std::min(30.f, pr.h - 18);
+            bool showTile = pr.w >= 96;
+            Rect tr{pr.x + 9, pr.y + (pr.h - tile) / 2, tile, tile};
+            if (showTile) g.IconTile(c.icon, tr, tint, t.dark);
+            float tx = showTile ? tr.R() + 8 : pr.x + 8;
+            Rect vr{tx, pr.y + 5, pr.R() - tx - 8, pr.h * 0.55f};
+            g.Text(c.header2, vr, Font::StatValue, t.text, showTile ? Align::Center : Align::Right);
+            g.Text(c.title, {tx, vr.B() - 2, vr.w, pr.h * 0.40f}, sorted ? Font::SmallSemi : Font::Caption, sorted ? t.text : t.textSecondary,
+                   showTile ? Align::Center : Align::Right);
         } else {
+            Rect tr{cr.x + 8, pills ? cr.B() - 30 : cr.y, cr.w - 16, pills ? 26.f : cr.h};
+            if (hot && !gripHot) g.FillRound({cr.x + 2, tr.y + 2, cr.w - 4, tr.h - 4}, 6.f, t.surfaceHover);
             g.Text(c.title, tr, sorted ? Font::SmallSemi : Font::Small, sorted ? t.text : t.textSecondary, c.align);
+            if (sorted) g.Chevron(c.align == Align::Right ? tr.x + 4 : std::min(tr.R() - 6, tr.x + g.Measure(c.title, Font::SmallSemi) + 10), tr.y + tr.h / 2, 7.f,
+                                  true, t.textTertiary, 1.2f);
         }
-        if (sorted) g.Glyph(sortDesc ? 0xE70D : 0xE70E, {cr.x + cr.w / 2 - 6, cr.y - 1, 12, 10}, Font::IconSmall, t.textTertiary);
         if (ui.Clicked(hid) && std::fabs(ui.in.mx - dragStartX_) < 4) {
             if (sortCol == ci) sortDesc = !sortDesc;
             else { sortCol = ci; sortDesc = c.align == Align::Right; } // numbers default to descending
@@ -111,7 +168,7 @@ void Table::Draw(Ui& ui, const Rect& r, TableSource& src) {
         }
         if (ui.RightClicked(hid) || ui.RightClicked(gid)) { headerMenu = true; headerMenuColumn = ci; }
         if (!c.tooltip.empty()) ui.Tooltip(hid, c.tooltip);
-        g.Line(cr.R() - 0.5f, cr.y + 8, cr.R() - 0.5f, cr.B() - 8, t.divider);
+        if (gripHot || resizing_ == ci) g.Line(cr.R() - 0.5f, cr.y + 10, cr.R() - 0.5f, cr.B() - 10, t.accent.Alpha(0.6f));
         x += c.width;
     }
     // Column resize / reorder dragging.
@@ -123,8 +180,7 @@ void Table::Draw(Ui& ui, const Rect& r, TableSource& src) {
         if (!ui.in.lDown) {
             float dx = ui.in.mx - dragStartX_;
             if (std::fabs(dx) > 24) {
-                // Drop: find display slot under the mouse.
-                float xx = r.x;
+                float xx = r.x + pad;
                 int target = dragging_;
                 for (size_t di = 0; di < order_.size(); ++di) {
                     auto& c = columns[order_[di]];
@@ -142,11 +198,10 @@ void Table::Draw(Ui& ui, const Rect& r, TableSource& src) {
         }
     }
     g.PopClip();
-    g.Line(r.x, header.B() - 0.5f, r.R(), header.B() - 0.5f, t.divider);
 
     // ---------------- Body ----------------
     size_t n = src.RowCount();
-    float contentH = n * rowH;
+    float contentH = n * rowH + 4;
     int sel = SelectedRow(src);
     if (ensureVisible_ && sel >= 0) {
         float top = sel * rowH;
@@ -164,29 +219,53 @@ void Table::Draw(Ui& ui, const Rect& r, TableSource& src) {
     scrollY = std::clamp(scrollY, 0.f, std::max(0.f, contentH - body.h));
 
     g.PushClip(body);
+    // Rounded panels: one per group (from its header to the row before the next header), or one for all rows.
+    auto rowY = [&](size_t row) { return body.y + row * rowH - scrollY; };
+    std::vector<std::pair<size_t, size_t>> panels;
+    for (size_t i = 0; i < n; ++i) {
+        if (src.RowIsGroup(i) || panels.empty()) {
+            if (!panels.empty()) panels.back().second = i;
+            panels.push_back({i, n});
+        }
+    }
+    for (auto& [a, b] : panels) {
+        float top = rowY(a) + (a ? 3.f : 0.f), bottom = rowY(b) - 3.f;
+        if (bottom < body.y || top > body.B()) continue;
+        Rect pr{r.x, top, r.w, bottom - top};
+        g.FillRound(pr, 12.f, t.panel);
+        g.StrokeRound(pr, 12.f, t.panelBorder);
+    }
     size_t first = static_cast<size_t>(scrollY / rowH);
     size_t last = std::min(n, first + static_cast<size_t>(body.h / rowH) + 2);
     for (size_t row = first; row < last; ++row) {
-        float y = body.y + row * rowH - scrollY;
-        Rect rr{r.x, y, r.w, rowH};
+        float y = rowY(row);
+        Rect rr{r.x + 6, y, r.w - 12, rowH};
         WidgetId rid = IdMix(id_, 100000 + src.RowKey(row));
         bool hot = ui.Hit(rid, rr);
         bool isSel = static_cast<int>(row) == sel;
         if (src.RowIsGroup(row)) {
             std::wstring label;
             src.CellText(row, 0, label);
-            g.Text(label, {r.x + 12, y + 6, r.w - 24, rowH - 6}, Font::BodySemi, t.text);
+            bool open = src.RowExpander(row) != 1;
+            float cy = y + rowH / 2 + 2;
+            if (hot) g.FillRound(rr.Inset(2, 4), 8.f, t.hover);
+            g.Chevron(r.x + pad + 14, cy, 8.f, open, t.textSecondary, 1.5f);
+            g.Text(label, {r.x + pad + 34, y + 2, r.w - 60, rowH}, Font::Subtitle, t.text);
             if (ui.Clicked(rid)) src.ToggleExpand(row);
             continue;
         }
         int hl = src.RowHighlight(row);
-        if (hl == 1) g.Fill(rr, t.good.Alpha(0.16f));
-        else if (hl == 2) g.Fill(rr, t.critical.Alpha(0.18f));
-        if (isSel) g.FillRound(rr.Inset(2, 1), 4.f, t.selection);
-        else if (hot) g.FillRound(rr.Inset(2, 1), 4.f, t.hover);
+        if (hl == 1) g.FillRound(rr.Inset(2, 1), 8.f, t.good.Alpha(0.14f));
+        else if (hl == 2) g.FillRound(rr.Inset(2, 1), 8.f, t.critical.Alpha(0.16f));
+        if (isSel) {
+            g.FillRound(rr.Inset(2, 1), 8.f, t.selection);
+            g.StrokeRound(rr.Inset(2, 1), 8.f, t.selectionBorder);
+        } else if (hot) {
+            g.FillRound(rr.Inset(2, 1), 8.f, t.hover);
+        }
         Color textC = hl == 3 ? t.textTertiary : t.text;
 
-        float cx = r.x;
+        float cx = r.x + pad;
         bool firstVisible = true;
         for (int ci : order_) {
             auto& c = columns[ci];
@@ -194,32 +273,38 @@ void Table::Draw(Ui& ui, const Rect& r, TableSource& src) {
             Rect cr{cx, y, c.width, rowH};
             if (heatMap && c.heat) {
                 float h = src.CellHeat(row, ci);
-                if (h > 0.001f) g.Fill({cr.x, cr.y, cr.w, cr.h}, t.Heat(h));
+                if (h >= 0 && (c.heatAlways || h > 0.02f)) g.FillRound(cr.Inset(3, 3), 7.f, t.Heat(h));
             }
             src.CellText(row, ci, cell_);
-            Rect tr = cr.Inset(8, 0);
+            Rect tr = cr.Inset(10, 0);
             if (firstVisible) {
                 int depth = src.RowDepth(row);
-                float indent = depth * 18.f;
+                float indent = depth * 20.f;
                 tr.x += indent;
                 tr.w -= indent;
                 int ex = src.RowExpander(row);
                 if (ex) {
-                    Rect er{tr.x - 2, y, 18, rowH};
+                    Rect er{tr.x - 4, y + 3, 20, rowH - 6};
                     WidgetId eid = IdMix(id_, 900000 + src.RowKey(row));
                     bool eh = ui.Hit(eid, er);
-                    if (eh) g.FillRound(er.Inset(1, 5), 3.f, t.surfaceHover);
-                    g.Glyph(ex == 2 ? 0xE70D : 0xE76C, er, Font::IconSmall, t.textSecondary);
+                    if (eh) g.FillRound(er, 5.f, t.surfaceHover);
+                    g.Chevron(er.x + 10, y + rowH / 2, 8.f, ex == 2, t.textSecondary, 1.4f);
                     if (ui.Clicked(eid)) src.ToggleExpand(row);
                 }
-                tr.x += 18;
-                tr.w -= 18;
+                tr.x += 22;
+                tr.w -= 22;
                 if (showIcons) {
-                    if (ID2D1Bitmap* icon = src.RowIcon(row)) g.DrawBitmap(icon, {tr.x, y + (rowH - 16) / 2, 16, 16});
-                    tr.x += 24;
-                    tr.w -= 24;
+                    float is = compact ? 18.f : 22.f;
+                    if (ID2D1Bitmap* icon = src.RowIcon(row)) g.DrawBitmap(icon, {tr.x, y + (rowH - is) / 2, is, is});
+                    tr.x += is + 10;
+                    tr.w -= is + 10;
                 }
                 firstVisible = false;
+            }
+            if (src.CellBadge(row, ci) == 1) {
+                g.Leaf(tr.x, y + rowH / 2 - 7, 14.f, t.good);
+                tr.x += 22;
+                tr.w -= 22;
             }
             Color cc = src.CellColor(row, ci, t);
             g.Text(cell_, tr, Font::Body, cc.a > 0 ? cc : textC, c.align);
@@ -239,17 +324,16 @@ void Table::Draw(Ui& ui, const Rect& r, TableSource& src) {
 
     // Scrollbar.
     if (contentH > body.h) {
-        float trackH = body.h - 4;
+        float trackH = body.h - 12;
         float thumbH = std::max(28.f, trackH * body.h / contentH);
-        float thumbY = body.y + 2 + (trackH - thumbH) * scrollY / (contentH - body.h);
+        float thumbY = body.y + 6 + (trackH - thumbH) * scrollY / (contentH - body.h);
         WidgetId sid = IdMix(id_, 3);
-        Rect hitR{body.R() - 12, body.y, 12, body.h};
+        Rect hitR{body.R() - 14, body.y, 14, body.h};
         bool hot = ui.Hit(sid, hitR);
         if (ui.Pressed(sid)) { sbDragY_ = ui.in.my; sbDragOff_ = scrollY; }
         if (ui.IsActive(sid) && ui.in.lDown) scrollY = std::clamp(sbDragOff_ + (ui.in.my - sbDragY_) * contentH / body.h, 0.f, contentH - body.h);
-        g.FillRound({body.R() - (hot ? 8.f : 6.f), thumbY, hot ? 6.f : 4.f, thumbH}, 3.f, t.textTertiary.Alpha(hot ? 0.8f : 0.4f));
+        g.FillRound({body.R() - (hot ? 9.f : 7.f), thumbY, hot ? 6.f : 4.f, thumbH}, 3.f, t.textTertiary.Alpha(hot ? 0.8f : 0.45f));
     }
-    (void)totalW;
 }
 
 std::wstring Table::SaveLayout() const {

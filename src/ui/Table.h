@@ -18,7 +18,10 @@ struct TableColumn {
     bool visible = true;
     bool heat = false;        // shade cells by CellHeat()
     std::wstring tooltip;
-    std::wstring header2;     // secondary header line, e.g. total "34%"
+    std::wstring header2;     // header value, e.g. total "34%"; shown as a metric pill when `icon` is set
+    MetricIcon icon = MetricIcon::None;
+    Color tint;               // pill / icon tint
+    bool heatAlways = false;  // draw the heat block even at zero load (CPU / Memory columns)
 };
 
 class TableSource {
@@ -35,7 +38,10 @@ public:
     virtual bool RowIsGroup(size_t row) const { return false; }
     // 0 normal, 1 new (green), 2 exiting (red), 3 dimmed (suspended / disabled)
     virtual int RowHighlight(size_t row) const { return 0; }
-    virtual Color CellColor(size_t row, int col, const Theme& t) const { return {}; }
+    // Text colour override; alpha 0 (the default) means "use the normal text colour".
+    virtual Color CellColor(size_t row, int col, const Theme& t) const { return Color{0, 0, 0, 0}; }
+    // Small badge drawn before the cell text: 1 = efficiency-mode leaf.
+    virtual int CellBadge(size_t row, int col) const { return 0; }
 };
 
 class Table {
@@ -49,6 +55,7 @@ public:
     bool compact = false;
     bool showIcons = true;
     bool heatMap = true;
+    bool fillFirst = false; // first visible column absorbs the remaining width
 
     // Results of the last Draw() (consumed by the owner after the frame).
     bool activated = false, contextMenu = false, headerMenu = false, sortChanged = false, selectionChanged = false;
@@ -60,7 +67,7 @@ public:
     int SelectedRow(const TableSource& src) const;
     void SelectRow(size_t row, const TableSource& src);
     void EnsureVisibleNext() { ensureVisible_ = true; }
-    float RowHeight() const { return compact ? 24.f : 30.f; }
+    float RowHeight() const { return compact ? 27.f : 34.f; }
     int ColumnIndex(const std::string& key) const;
     const std::string& SortKey() const;
 
@@ -68,6 +75,7 @@ public:
     void LoadLayout(const std::wstring& s);
 
 private:
+    void DrawImpl(Ui& ui, const Rect& r, TableSource& src);
     WidgetId id_;
     float viewH_ = 0;
     bool ensureVisible_ = false;

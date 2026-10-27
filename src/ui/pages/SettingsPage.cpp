@@ -39,26 +39,26 @@ public:
         }
         {
             Rect c = Row(ui, x, w, L"Accent color", L"Used for selection, graphs highlights and controls.");
-            static const uint32_t swatches[] = {0, 0x0067C0, 0x8764B8, 0xC239B3, 0xE74856, 0xF7630C, 0x10893E, 0x00B7C3, 0x515C6B};
+            // 0 = NEXUS blue ("system"), 1 = the Windows accent ("windows"), then fixed colours.
+            static const uint32_t swatches[] = {0x2B7BFF, 0, 0x8764B8, 0xC239B3, 0xE74856, 0xF7630C, 0x10893E, 0x00B7C3, 0x515C6B};
             std::wstring cur = cfg.GetString("ui.accent", L"system");
             float sx = c.R() - 9 * 30;
             for (int i = 0; i < 9; ++i) {
                 Rect sr{sx + i * 30, c.y + (c.h - 24) / 2, 24, 24};
                 WidgetId id = IdMix(Id("set.accent"), i);
                 bool hot = ui.Hit(id, sr);
-                Color col = i == 0 ? Color::Hex(AccentFromWindows()) : Color::Hex(swatches[i]);
+                Color col = i == 1 ? Color::Hex(AccentFromWindows()) : Color::Hex(swatches[i]);
                 g.FillRound(sr, 12.f, col);
-                bool selected = (i == 0 && cur == L"system") || (i > 0 && cur == FormatHex(swatches[i], 6).substr(2));
+                bool selected = i == 0 ? cur == L"system" : i == 1 ? cur == L"windows" : cur == FormatHex(swatches[i], 6).substr(2);
                 if (selected || hot) g.StrokeRound(sr.Inset(-3), 14.f, selected ? t.text : t.textTertiary, 2.f);
-                if (i == 0) g.Text(L"W", sr, Font::Caption, Color{1, 1, 1, 1}, Align::Center);
-                ui.Tooltip(id, i == 0 ? L"Use the Windows accent color" : L"Custom accent");
+                if (i == 1) g.Text(L"W", sr, Font::Caption, Color{1, 1, 1, 1}, Align::Center);
+                ui.Tooltip(id, i == 0 ? L"NEXUS blue (default)" : i == 1 ? L"Use the Windows accent color" : L"Custom accent");
                 if (ui.Clicked(id)) {
-                    cfg.SetString("ui.accent", i == 0 ? L"system" : FormatHex(swatches[i], 6).substr(2));
+                    cfg.SetString("ui.accent", i == 0 ? L"system" : i == 1 ? L"windows" : FormatHex(swatches[i], 6).substr(2));
                     app.ApplyTheme();
                 }
             }
         }
-        Toggle(ui, x, w, "ui.mica", true, L"Transparency (Mica)", L"Show the Windows 11 Mica material behind the navigation pane (Windows 11 22H2 or later).", [this] { app.ApplyTheme(); });
         {
             Rect c = Row(ui, x, w, L"Text and UI scale", L"In addition to the Windows display scale. Ctrl + / Ctrl - also adjust it.");
             double sc = cfg.GetDouble("ui.scale", 1.0);

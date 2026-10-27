@@ -14,8 +14,8 @@ Legend: ✅ implemented · 🟡 implemented with a documented difference · ❌ 
 | Navigation pane, collapsible | ✅ | Ctrl+B; sections can also be hidden or set as the start page |
 | Search box (filters processes) | ✅ | Adds PID, publisher, regex, numeric and negation terms |
 | Run new task (with "administrative privileges" option, Browse) | ✅ | Native dialog with autocomplete |
-| End task / Efficiency mode toolbar buttons | ✅ | |
-| Light / dark / system theme | ✅ | Plus accent color, Mica, UI scale |
+| End task / Efficiency mode buttons | ✅ | In the page header |
+| Light / dark / system theme | ✅ | Plus accent color (NEXUS blue, Windows accent or custom), UI scale |
 | Always on top | ✅ | Ctrl+T |
 | Minimize on use, hide when minimized | 🟡 | "Hide when minimized" and "Close to notification area"; there is no "minimize on use" because NEXUS never launches other apps automatically |
 | Real-time update speed High / Normal / Low / Paused, Refresh now | ✅ | Plus "Very low"; F5 refreshes |

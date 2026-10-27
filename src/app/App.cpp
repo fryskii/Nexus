@@ -57,14 +57,17 @@ COLORREF ToColorRef(Color c) {
 }
 Color Opaque(Color c, Color over) { return over.Mix(Color{c.r, c.g, c.b, 1}, c.a); }
 
-struct NavEntry { PageId id; const wchar_t* name; wchar_t glyph; };
-const NavEntry kNav[] = {
+} // namespace
+
+const NavEntry kNavEntries[13] = {
     {PageId::Overview, L"Overview", 0xE80F},     {PageId::Processes, L"Processes", 0xE71D}, {PageId::Performance, L"Performance", 0xE9D2},
     {PageId::AppHistory, L"App history", 0xE81C}, {PageId::Startup, L"Startup apps", 0xE7E8}, {PageId::Users, L"Users", 0xE716},
     {PageId::Details, L"Details", 0xE8FD},       {PageId::Services, L"Services", 0xEA86},    {PageId::Hardware, L"Hardware", 0xE7F4},
     {PageId::Network, L"Network", 0xE839},       {PageId::Storage, L"Storage", 0xEDA2},      {PageId::Diagnostics, L"System diagnostics", 0xE9D9},
     {PageId::Settings, L"Settings", 0xE713},
 };
+namespace {
+const auto& kNav = kNavEntries;
 } // namespace
 
 App& TheApp() { return *g_app; }
@@ -179,9 +182,15 @@ bool App::Create(int nCmdShow, bool startMinimized) {
     RegisterClassExW(&wc);
 
     std::wstring title = elevated_ ? L"NEXUS (Administrator)" : L"NEXUS";
-    hwnd_ = CreateWindowExW(0, kClassName, title.c_str(), WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, CW_USEDEFAULT, CW_USEDEFAULT,
+    // On Windows the caption style stays (snap layouts, animations) and WM_NCCALCSIZE hides it. Wine
+    // without a window manager reserves the caption area as an undrawn decoration, so drop it there.
+    DWORD style = WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN;
+    if (IsRunningUnderWine()) style = WS_POPUP | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_CLIPCHILDREN; // no WM in test runs: avoid Wine-reserved decorations
+    hwnd_ = CreateWindowExW(0, kClassName, title.c_str(), style, CW_USEDEFAULT, CW_USEDEFAULT,
                             1180, 760, nullptr, nullptr, wc.hInstance, this);
     if (!hwnd_) return false;
+    // Re-run WM_NCCALCSIZE so the custom title bar replaces the system caption.
+    SetWindowPos(hwnd_, nullptr, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     dpi_ = static_cast<float>(GetDpiForWindow(hwnd_));
     if (!settings_.Has("window.w")) {
         // First run: size relative to DPI and centre on the primary work area.
@@ -206,7 +215,7 @@ bool App::Create(int nCmdShow, bool startMinimized) {
 
     // Search box (native edit so IME, clipboard, accessibility and undo work as users expect).
     search_ = CreateWindowExW(0, WC_EDITW, L"", WS_CHILD | ES_AUTOHSCROLL, 0, 0, 10, 10, hwnd_, reinterpret_cast<HMENU>(100), wc.hInstance, nullptr);
-    SendMessageW(search_, EM_SETCUEBANNER, TRUE, reinterpret_cast<LPARAM>(L"Search processes (name, PID, publisher, /regex/, cpu>5)"));
+    SendMessageW(search_, EM_SETCUEBANNER, TRUE, reinterpret_cast<LPARAM>(L"Search processes, apps, or PID\u2026"));
     SetWindowTheme(search_, theme_.dark ? L"DarkMode_Explorer" : L"Explorer", nullptr);
 
     sampler_ = std::make_unique<Sampler>(hwnd_, WM_NX_SNAPSHOT);
@@ -245,6 +254,10 @@ bool App::Create(int nCmdShow, bool startMinimized) {
     SetTopmost(settings_.GetBool("window.topmost", false));
     a11y::Attach(hwnd_);
 
+    if (SelfEfficiency()) {
+        struct { ULONG Version, ControlMask, StateMask; } pt{1, 0x1, 0x1};
+        SetProcessInformation(GetCurrentProcess(), static_cast<PROCESS_INFORMATION_CLASS>(4), &pt, sizeof pt);
+    }
     SetTimer(hwnd_, kTimerSave, 60000, nullptr);
     if (startMinimized || settings_.GetBool("startup.minimized", false)) {
         if (settings_.GetBool("window.hideWhenMinimized", false) && tray_->Visible()) { hiddenToTray_ = true; }
@@ -262,7 +275,8 @@ void App::ApplyMica() {
     int corner = 2; // DWMWCP_ROUND
     DwmSetWindowAttribute(hwnd_, NX_DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof corner);
     // Mica (DWMWA_SYSTEMBACKDROP_TYPE) exists from Windows 11 22H2 (build 22621).
-    bool want = settings_.GetBool("ui.mica", true) && WindowsBuild() >= 22621 && !IsRunningUnderWine();
+    // NEXUS paints its own gradient background, so the system backdrop stays off.
+    bool want = false;
     int backdrop = want ? 2 /*DWMSBT_MAINWINDOW*/ : 1 /*DWMSBT_NONE*/;
     bool ok = SUCCEEDED(DwmSetWindowAttribute(hwnd_, NX_DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof backdrop)) && want;
     MARGINS m = ok ? MARGINS{-1, -1, -1, -1} : MARGINS{0, 0, 0, 0};
@@ -275,7 +289,8 @@ void App::ApplyTheme() {
     std::wstring mode = settings_.GetString("ui.theme", L"system");
     ThemeMode tm = mode == L"light" ? ThemeMode::Light : mode == L"dark" ? ThemeMode::Dark : ThemeMode::System;
     std::wstring acc = settings_.GetString("ui.accent", L"system");
-    uint32_t rgb = acc == L"system" ? 0 : static_cast<uint32_t>(wcstoul(acc.c_str(), nullptr, 16));
+    // "system" = NEXUS blue (default), "windows" = the Windows accent colour, otherwise RRGGBB.
+    uint32_t rgb = acc == L"system" ? 0 : acc == L"windows" ? AccentFromWindows() : static_cast<uint32_t>(wcstoul(acc.c_str(), nullptr, 16));
     bool micaBefore = theme_.mica;
     theme_ = Theme::Make(tm, rgb, micaBefore);
     ApplyMica();
@@ -283,7 +298,7 @@ void App::ApplyTheme() {
     EnableDarkMenus(theme_.dark);
     if (search_) SetWindowTheme(search_, theme_.dark ? L"DarkMode_Explorer" : L"Explorer", nullptr);
     if (searchBrush_) DeleteObject(searchBrush_);
-    searchBrush_ = CreateSolidBrush(ToColorRef(theme_.surfaceAlt));
+    searchBrush_ = CreateSolidBrush(ToColorRef(theme_.searchBg));
     float scale = static_cast<float>(std::clamp(settings_.GetDouble("ui.scale", 1.0), 0.75, 2.0));
     gfx_.SetDpi(dpi_ * scale);
     if (searchFont_) DeleteObject(searchFont_);
@@ -294,8 +309,19 @@ void App::ApplyTheme() {
     Invalidate();
 }
 
+void App::SetSelfEfficiency(bool on) {
+    settings_.SetBool("app.efficiency", on);
+    // EcoQoS for NEXUS itself (same mechanism as Task Manager's efficiency mode, without changing priority).
+    struct { ULONG Version, ControlMask, StateMask; } pt{1, 0x1, on ? 0x1u : 0u};
+    SetProcessInformation(GetCurrentProcess(), static_cast<PROCESS_INFORMATION_CLASS>(4) /*ProcessPowerThrottling*/, &pt, sizeof pt);
+    ApplyRefreshRate();
+    UpdateDemand();
+    ShowStatus(on ? L"NEXUS efficiency mode on: EcoQoS and updates every 2 s or slower" : L"NEXUS efficiency mode off");
+}
+
 void App::ApplyRefreshRate() {
     int ms = static_cast<int>(settings_.GetInt("refresh.ms", 1000));
+    if (SelfEfficiency()) ms = std::max(ms, 2000);
     sampler_->SetIntervalMs(static_cast<uint32_t>(std::clamp(ms, 250, 10000)));
     sampler_->SetPaused(settings_.GetBool("refresh.paused", false));
 }
@@ -346,9 +372,11 @@ void App::UpdateDemand() {
     // Diagnostics rules need disk latency, and the tray/mini monitor need a few metrics even when hidden.
     d |= demand::Disk;
     if (mini_ && mini_->Visible()) d |= demand::GpuSystem | demand::Disk;
+    if (visible && InsightsVisible(gfx_.Width())) d |= demand::GpuSystem | demand::GpuSensors | demand::Disk;
     sampler_->SetDemand(d);
     // When the window is not visible and nothing else needs data, slow sampling down.
     int ms = static_cast<int>(settings_.GetInt("refresh.ms", 1000));
+    if (SelfEfficiency()) ms = std::max(ms, 2000);
     bool background = !visible && !(mini_ && mini_->Visible());
     sampler_->SetIntervalMs(static_cast<uint32_t>(background ? std::max(ms * 4, 4000) : std::clamp(ms, 250, 10000)));
 }
@@ -364,6 +392,8 @@ void App::Navigate(PageId id) {
     if (pages_[static_cast<int>(id)]->HasSearch()) {
         SendMessageW(search_, EM_SETCUEBANNER, TRUE, reinterpret_cast<LPARAM>(pages_[static_cast<int>(id)]->SearchHint()));
         pages_[static_cast<int>(id)]->OnSearch(searchText_);
+    } else {
+        SendMessageW(search_, EM_SETCUEBANNER, TRUE, reinterpret_cast<LPARAM>(L"Search processes, apps, or PID\u2026"));
     }
     UpdateDemand();
     a11y::NotifyPageChanged(hwnd_, pages_[static_cast<int>(id)]->Title());
@@ -765,211 +795,11 @@ void App::EnsureEventCounts() {
 // ------------------------------------------------------------------------------------------
 // Painting
 // ------------------------------------------------------------------------------------------
-void App::Paint() {
-    PAINTSTRUCT ps;
-    BeginPaint(hwnd_, &ps);
-    if (!sampler_ || !pages_[static_cast<int>(current_)]) { EndPaint(hwnd_, &ps); return; } // still creating
-    if (!gfx_.Begin()) { EndPaint(hwnd_, &ps); return; }
-    if (!ui_) ui_ = std::make_unique<Ui>(gfx_, theme_, input_);
-    Ui& ui = *ui_;
-    ui.BeginFrame();
-    const float W = gfx_.Width(), H = gfx_.Height();
-    gfx_.Clear(theme_.mica ? Color{0, 0, 0, 0} : theme_.nav.a > 0 ? theme_.nav : theme_.window);
-
-    float navW = navCollapsed_ ? 52.f : 214.f;
-    Rect nav{0, 0, navW, H};
-    DrawNav(ui, nav);
-
-    Rect content{navW, 0, W - navW, H};
-    gfx_.FillRound({content.x, content.y + 0, content.w + 12, content.h + 12}, 8.f, theme_.window);
-    gfx_.StrokeRound({content.x, content.y, content.w + 12, content.h + 12}, 8.f, theme_.cardBorder);
-    Rect status = content;
-    status = Rect{content.x, H - 26, content.w, 26};
-    Rect top{content.x, 0, content.w, 52};
-    Rect body{content.x + 16, top.B(), content.w - 32, status.y - top.B()};
-    Page* page = pages_[static_cast<int>(current_)].get();
-    DrawTopBar(ui, top);
-    gfx_.PushClip({content.x, top.B(), content.w, status.y - top.B()});
-    page->Draw(ui, body);
-    gfx_.PopClip();
-    DrawStatusBar(ui, status);
-    ui.EndFrame();
-    gfx_.End();
-    EndPaint(hwnd_, &ps);
-    input_.ClearEvents();
-    auto d = ui.TakeDeferred();
-    for (auto& f : d) deferred_.push_back(std::move(f));
-    // Actions that open menus/dialogs run outside WM_PAINT.
-    if (!deferred_.empty()) PostMessageW(hwnd_, WM_NX_DEFERRED, 0, 0);
-    lastHot_ = ui.HitTest(input_.mx, input_.my);
-}
-
 void App::RunDeferred() {
     auto list = std::move(deferred_);
     deferred_.clear();
     for (auto& f : list) f();
     if (!list.empty()) Invalidate();
-}
-
-void App::DrawNav(Ui& ui, Rect r) {
-    Gfx& g = gfx_;
-    const Theme& t = theme_;
-    if (t.nav.a > 0) g.Fill(r, t.nav);
-    float y = 10;
-    // Hamburger / collapse toggle.
-    if (ui.IconButton(Id("nav.toggle"), {r.x + 8, y, 36, 34}, 0xE700, navCollapsed_ ? L"Expand navigation" : L"Collapse navigation")) {
-        navCollapsed_ = !navCollapsed_;
-        settings_.SetBool("ui.nav.collapsed", navCollapsed_);
-    }
-    if (!navCollapsed_) g.Text(L"NEXUS", {r.x + 52, y, r.w - 60, 34}, Font::Subtitle, t.text);
-    y += 46;
-    float itemH = compact_ ? 32.f : 38.f;
-    Rect list{r.x, y, r.w, r.h - y - 54};
-    float contentH = 0;
-    for (auto& e : kNav)
-        if (e.id != PageId::Settings && PageVisibleInNav(e.id)) contentH += itemH + 2;
-    float off = navScroll_;
-    ui.Scroll(Id("nav.scroll"), list, contentH, off);
-    navScroll_ = off;
-    g.PushClip(list);
-    float iy = list.y - navScroll_;
-    int shortcut = 1;
-    auto item = [&](const NavEntry& e, float yy) {
-        Rect ir{r.x + 6, yy, r.w - 12, itemH};
-        WidgetId id = IdMix(Id("nav.item"), static_cast<int>(e.id));
-        bool hot = ui.Hit(id, ir);
-        bool sel = current_ == e.id;
-        if (sel) g.FillRound(ir, 5.f, t.dark ? Color{1, 1, 1, 0.07f} : Color{0, 0, 0, 0.05f});
-        else if (hot) g.FillRound(ir, 5.f, t.dark ? Color{1, 1, 1, 0.045f} : Color{0, 0, 0, 0.035f});
-        if (sel) g.FillRound({ir.x, ir.y + itemH / 2 - 8, 3, 16}, 1.5f, t.accent);
-        g.Glyph(e.glyph, {ir.x + 8, ir.y, 24, ir.h}, Font::Icon, sel ? t.accentText : t.text);
-        if (!navCollapsed_) g.Text(e.name, {ir.x + 42, ir.y, ir.w - 46, ir.h}, sel ? Font::BodySemi : Font::Body, t.text);
-        else ui.Tooltip(id, e.name);
-        if (ui.Clicked(id)) Navigate(e.id);
-        if (ui.RightClicked(id) && e.id != PageId::Settings) {
-            PageId pid = e.id;
-            ui.Defer([this, pid] {
-                UINT c = ShowMenu({{1, L"Hide from navigation"}, {2, L"Set as start page"}});
-                if (c == 1) SetPageHidden(pid, true);
-                if (c == 2) settings_.SetInt("ui.startPage", static_cast<int>(pid));
-            });
-        }
-    };
-    for (auto& e : kNav) {
-        if (e.id == PageId::Settings || !PageVisibleInNav(e.id)) continue;
-        item(e, iy);
-        iy += itemH + 2;
-        ++shortcut;
-    }
-    g.PopClip();
-    item(kNav[static_cast<int>(PageId::Settings)], r.B() - itemH - 12);
-}
-
-void App::DrawTopBar(Ui& ui, Rect r) {
-    Gfx& g = gfx_;
-    const Theme& t = theme_;
-    Page* page = pages_[static_cast<int>(current_)].get();
-    g.Text(page->Title(), {r.x + 18, r.y + 6, 260, r.h - 6}, Font::Title, t.text);
-    float right = r.R() - 12;
-    auto btn = [&](const char* key, wchar_t glyph, const std::wstring& tip, bool toggled) {
-        right -= 36;
-        return ui.IconButton(Id(key), {right, r.y + 12, 34, 32}, glyph, tip, true, toggled);
-    };
-    bool paused = sampler_->Paused();
-    if (btn("top.pause", paused ? 0xE768 : 0xE769, paused ? L"Resume updates (Ctrl+P)" : L"Pause updates (Ctrl+P)", paused)) {
-        bool p = !paused;
-        settings_.SetBool("refresh.paused", p);
-        sampler_->SetPaused(p);
-        ShowStatus(p ? L"Updates paused" : L"Updates resumed");
-    }
-    if (btn("top.refresh", 0xE72C, L"Refresh now (F5)", false)) sampler_->RefreshNow();
-    bool top = settings_.GetBool("window.topmost", false);
-    if (btn("top.pin", 0xE718, top ? L"Always on top: on (Ctrl+T)" : L"Always on top: off (Ctrl+T)", top)) SetTopmost(!top);
-    if (btn("top.mini", 0xE8A7, L"Mini monitor (Ctrl+M)", MiniMonitorVisible())) ToggleMiniMonitor();
-    right -= 8;
-    float runW = 132;
-    right -= runW;
-    if (ui.Button(Id("top.run"), {right, r.y + 12, runW, 32}, L"Run new task", 0xE710)) ui.Defer([this] { RunNewTaskDialog(); });
-    if (!elevated_) {
-        right -= 40;
-        if (ui.IconButton(Id("top.admin"), {right, r.y + 12, 34, 32}, 0xE7EF, L"Restart as administrator (shows all details, enables per-process network, SMART)"))
-            ui.Defer([this] { RequestElevatedRestart(L"Some information and actions require administrator rights."); });
-    }
-    float searchX = r.x + 18 + std::min(260.f, g.Measure(page->Title(), Font::Title) + 24);
-    float searchW = std::min(420.f, right - searchX - 12);
-    bool showSearch = page->HasSearch() && searchW > 120;
-    Rect sr{searchX, r.y + 12, searchW, 32};
-    if (showSearch) {
-        g.FillRound(sr, 4.f, t.surfaceAlt);
-        g.StrokeRound(sr, 4.f, t.cardBorder);
-        g.FillRound({sr.x + 1, sr.B() - 2, sr.w - 2, 1.5f}, 1.f, GetFocus() == search_ ? t.accent : t.textTertiary.Alpha(0.4f));
-        g.Glyph(0xE721, {sr.x + 6, sr.y, 22, sr.h}, Font::IconSmall, t.textSecondary);
-    }
-    LayoutSearch({sr.x + 30, sr.y + 7, sr.w - 38, sr.h - 12}, showSearch);
-}
-
-void App::LayoutSearch(const Rect& r, bool visible) {
-    if (!search_) return;
-    if (!visible) {
-        if (IsWindowVisible(search_)) ShowWindow(search_, SW_HIDE);
-        return;
-    }
-    float s = gfx_.Scale();
-    RECT want{static_cast<LONG>(r.x * s), static_cast<LONG>(r.y * s), static_cast<LONG>(r.R() * s), static_cast<LONG>(r.B() * s)};
-    RECT cur;
-    GetWindowRect(search_, &cur);
-    MapWindowPoints(nullptr, hwnd_, reinterpret_cast<POINT*>(&cur), 2);
-    if (memcmp(&cur, &want, sizeof cur) != 0 || !IsWindowVisible(search_))
-        SetWindowPos(search_, nullptr, want.left, want.top, want.right - want.left, want.bottom - want.top, SWP_NOZORDER | SWP_SHOWWINDOW | SWP_NOACTIVATE);
-}
-
-void App::DrawStatusBar(Ui& ui, Rect r) {
-    Gfx& g = gfx_;
-    const Theme& t = theme_;
-    g.Line(r.x, r.y, r.R(), r.y, t.divider);
-    std::wstring left;
-    if (!status_.empty()) left = status_;
-    else if (snap_) {
-        left = L"Processes " + std::to_wstring(snap_->cpu.processes) + L"   CPU " + FormatPercent(snap_->cpu.total) + L"   Memory " +
-               FormatPercent(snap_->mem.total ? 100.0 * snap_->mem.InUse() / snap_->mem.total : 0) + L"   Up " + FormatUptime(snap_->cpu.uptimeSec);
-    }
-    g.Text(left, {r.x + 18, r.y, r.w * 0.65f, r.h}, Font::Small, statusError_ && !status_.empty() ? t.critical : t.textSecondary);
-    std::wstring right;
-    int ms = static_cast<int>(settings_.GetInt("refresh.ms", 1000));
-    if (sampler_->Paused()) right = L"Paused";
-    else right = ms < 1000 ? L"Update: high (0.5 s)" : ms <= 1000 ? L"Update: normal (1 s)" : L"Update: " + std::to_wstring(ms / 1000) + L" s";
-    if (snap_) {
-        wchar_t b[64];
-        swprintf(b, 64, L"   Sample %.1f ms", snap_->collectMs);
-        right += b;
-    }
-    if (elevated_) right += L"   Administrator";
-    WidgetId sid = Id("status.speed");
-    Rect rr{r.R() - 300, r.y, 284, r.h};
-    bool hot = ui.Hit(sid, rr);
-    g.Text(right, rr, Font::Small, hot ? t.text : t.textTertiary, Align::Right);
-    ui.Tooltip(sid, L"Click to change the update speed. 'Sample' is the time NEXUS spent collecting the last snapshot.");
-    if (ui.Clicked(sid)) {
-        ui.Defer([this, ms] {
-            bool paused = sampler_->Paused();
-            UINT c = ShowMenu({{1, L"High (0.5 s)", ms == 500 && !paused, true, false, true},
-                               {2, L"Normal (1 s)", ms == 1000 && !paused, true, false, true},
-                               {3, L"Low (2 s)", ms == 2000 && !paused, true, false, true},
-                               {4, L"Very low (4 s)", ms == 4000 && !paused, true, false, true},
-                               MenuItem::Sep(),
-                               {5, L"Paused", paused}});
-            int nms[] = {0, 500, 1000, 2000, 4000};
-            if (c >= 1 && c <= 4) {
-                settings_.SetInt("refresh.ms", nms[c]);
-                settings_.SetBool("refresh.paused", false);
-                ApplyRefreshRate();
-                UpdateDemand();
-            } else if (c == 5) {
-                settings_.SetBool("refresh.paused", !paused);
-                ApplyRefreshRate();
-            }
-        });
-    }
 }
 
 // ------------------------------------------------------------------------------------------
@@ -986,6 +816,7 @@ void App::HandleMouse(UINT msg, WPARAM wp, LPARAM lp) {
     bool immediate = true;
     switch (msg) {
     case WM_MOUSEMOVE: {
+        if (ncHover_) { ncHover_ = 0; Invalidate(); }
         if (!trackingMouse_) {
             TRACKMOUSEEVENT tme{sizeof tme, TME_LEAVE, hwnd_, 0};
             TrackMouseEvent(&tme);
@@ -1120,6 +951,15 @@ LRESULT App::WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
     switch (m) {
     case WM_PAINT: Paint(); return 0;
     case WM_ERASEBKGND: return 1;
+    case WM_NCCALCSIZE: return OnNcCalcSize(wp, lp);
+    case WM_NCHITTEST: {
+        LRESULT r = DefWindowProcW(h, m, wp, lp);
+        if (r != HTCLIENT) return r; // side and bottom resize borders
+        return OnNcHitTest(lp);
+    }
+    case WM_NCMOUSEMOVE: case WM_NCMOUSELEAVE: case WM_NCLBUTTONDOWN: case WM_NCLBUTTONDBLCLK: case WM_NCLBUTTONUP:
+        if (OnNcMouse(m, wp, lp)) return 0;
+        break;
     case WM_SIZE:
         gfx_.Resize(LOWORD(lp), HIWORD(lp));
         if (wp == SIZE_MINIMIZED) {
@@ -1170,6 +1010,8 @@ LRESULT App::WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             std::wstring s(n, L'\0');
             GetWindowTextW(search_, s.data(), n + 1);
             searchText_ = s;
+            // The title-bar search is global: typing on a page without search goes to Processes.
+            if (!s.empty() && !pages_[static_cast<int>(current_)]->HasSearch()) Navigate(PageId::Processes);
             pages_[static_cast<int>(current_)]->OnSearch(s);
             Invalidate();
             return 0;
@@ -1178,8 +1020,8 @@ LRESULT App::WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         break;
     case WM_CTLCOLOREDIT: {
         HDC dc = reinterpret_cast<HDC>(wp);
-        SetTextColor(dc, ToColorRef(Opaque(theme_.text, theme_.surfaceAlt)));
-        SetBkColor(dc, ToColorRef(theme_.surfaceAlt));
+        SetTextColor(dc, ToColorRef(Opaque(theme_.text, theme_.searchBg)));
+        SetBkColor(dc, ToColorRef(theme_.searchBg));
         return reinterpret_cast<LRESULT>(searchBrush_);
     }
     case WM_ACTIVATE:
@@ -1257,9 +1099,8 @@ void NativeEdit::Place(App& app, const Rect& r, const wchar_t* cue) {
         SetWindowTheme(hwnd_, app.Th().dark ? L"DarkMode_Explorer" : L"Explorer", nullptr);
     }
     Gfx& g = app.G();
-    g.FillRound(r, 4.f, app.Th().surfaceAlt);
-    g.StrokeRound(r, 4.f, app.Th().cardBorder);
-    g.FillRound({r.x + 1, r.B() - 2, r.w - 2, 1.5f}, 1.f, Focused() ? app.Th().accent : app.Th().textTertiary.Alpha(0.4f));
+    g.FillRound(r, 10.f, app.Th().searchBg);
+    g.StrokeRound(r, 10.f, Focused() ? app.Th().accent.Alpha(0.8f) : app.Th().searchBorder);
     RECT want{static_cast<LONG>((r.x + 8) * s), static_cast<LONG>((r.y + 6) * s), static_cast<LONG>((r.R() - 8) * s), static_cast<LONG>((r.B() - 5) * s)};
     if (memcmp(&want, &last_, sizeof want) != 0 || !IsWindowVisible(hwnd_)) {
         SetWindowPos(hwnd_, nullptr, want.left, want.top, want.right - want.left, want.bottom - want.top, SWP_NOZORDER | SWP_SHOWWINDOW | SWP_NOACTIVATE);

@@ -54,34 +54,61 @@ float Ui::Wheel(const Rect& r) {
 bool Ui::Button(WidgetId id, const Rect& r, const std::wstring& label, wchar_t glyph, ButtonStyle style, bool enabled) {
     bool hot = enabled && Hit(id, r);
     bool down = hot && active_ == id && in.lDown;
-    Color bg, fg = t.text, border = t.cardBorder;
+    const float rad = 10.f;
+    Color fg = t.text;
     switch (style) {
     case ButtonStyle::Accent:
-        bg = enabled ? (down ? t.accent.Alpha(0.8f) : hot ? t.accent.Alpha(0.9f) : t.accent) : t.textDisabled.Alpha(0.2f);
-        fg = enabled ? t.onAccent : t.textDisabled;
-        border = Color{0, 0, 0, 0};
+        if (enabled) {
+            // Bright gradient pill with a soft glow, as the primary action.
+            Color top = t.accent.Mix(Color{1, 1, 1, 1}, hot ? 0.22f : 0.12f), bottom = down ? t.accentDeep : t.accent;
+            if (t.dark) g.Glow(r.x + r.w / 2, r.y + r.h / 2, r.w * 0.75f, r.h * 1.3f, t.accent.Alpha(hot ? 0.35f : 0.22f));
+            g.FillGradient(r, rad, top, bottom);
+            g.StrokeRound(r, rad, Color{1, 1, 1, t.dark ? 0.22f : 0.35f});
+            fg = t.onAccent;
+        } else {
+            g.FillRound(r, rad, t.textDisabled.Alpha(0.2f));
+            fg = t.textDisabled;
+        }
         break;
     case ButtonStyle::Subtle:
-        bg = down ? t.surfacePressed : hot ? t.surfaceHover : Color{0, 0, 0, 0};
-        border = Color{0, 0, 0, 0};
+        if (down) g.FillRound(r, rad, t.surfacePressed);
+        else if (hot) g.FillRound(r, rad, t.surfaceHover);
         break;
     case ButtonStyle::Danger:
-        bg = down ? t.critical.Alpha(0.25f) : hot ? t.critical.Alpha(0.18f) : t.surfaceAlt;
+        g.FillRound(r, rad, down ? t.critical.Alpha(0.25f) : hot ? t.critical.Alpha(0.16f) : t.panel);
+        g.StrokeRound(r, rad, t.critical.Alpha(0.45f));
         fg = enabled ? t.critical : t.textDisabled;
         break;
     default:
-        bg = down ? t.surfacePressed : hot ? t.surfaceAlt.Mix(t.text, 0.04f) : t.surfaceAlt;
+        // Glass pill with a thin blue edge.
+        g.FillRound(r, rad, down ? t.surfacePressed.Mix(t.panel, 0.3f) : hot ? t.surfaceAlt.Mix(t.accent, 0.10f) : t.panel);
+        g.StrokeRound(r, rad, hot && enabled ? t.accent.Alpha(0.55f) : t.panelBorder);
         break;
     }
     if (!enabled && style != ButtonStyle::Accent) fg = t.textDisabled;
-    g.FillRound(r, 4.f, bg);
-    if (border.a > 0) g.StrokeRound(r, 4.f, border);
     float tw = label.empty() ? 0 : g.Measure(label, Font::Body);
     float gw = glyph ? 16.f : 0;
-    float gap = glyph && !label.empty() ? 8.f : 0;
+    float gap = glyph && !label.empty() ? 9.f : 0;
     float total = tw + gw + gap;
-    float x = r.x + std::max(8.f, (r.w - total) / 2);
-    if (glyph) g.Glyph(glyph, {x, r.y, gw, r.h}, Font::IconSmall, fg);
+    float x = r.x + std::max(10.f, (r.w - total) / 2);
+    if (glyph >= 0xF000 && glyph < 0xF010) {
+        // Vector glyphs (independent of icon fonts): play-circle, stop-circle, leaf.
+        float cx = x + 8, cy = r.y + r.h / 2;
+        if (glyph == 0xF001 || glyph == 0xF002) {
+            g.StrokeRound({cx - 8, cy - 8, 16, 16}, 8.f, fg, 1.4f);
+            if (glyph == 0xF001) {
+                g.Line(cx - 2, cy - 4, cx - 2, cy + 4, fg, 1.6f);
+                g.Line(cx - 2, cy - 4, cx + 4, cy, fg, 1.6f);
+                g.Line(cx - 2, cy + 4, cx + 4, cy, fg, 1.6f);
+            } else {
+                g.FillRound({cx - 3.5f, cy - 3.5f, 7, 7}, 1.5f, fg);
+            }
+        } else if (glyph == 0xF003) {
+            g.Leaf(cx - 8, cy - 8, 16.f, fg);
+        }
+    } else if (glyph) {
+        g.Glyph(glyph, {x, r.y, gw, r.h}, Font::Icon, fg);
+    }
     if (!label.empty()) g.Text(label, {x + gw + gap, r.y, r.R() - (x + gw + gap) - 4, r.h}, Font::Body, fg);
     return enabled && Clicked(id);
 }
@@ -177,8 +204,18 @@ float Ui::Scroll(WidgetId id, const Rect& vp, float contentH, float& offset) {
 }
 
 void Ui::Card(const Rect& r, bool hover) {
-    g.FillRound(r, 8.f, hover ? t.card.Mix(t.text, 0.03f) : t.card);
-    g.StrokeRound(r, 8.f, t.cardBorder);
+    g.FillRound(r, 12.f, hover ? t.card.Mix(t.accent, 0.06f) : t.card);
+    g.Line(r.x + 12, r.y + 0.5f, r.R() - 12, r.y + 0.5f, t.panelHighlight);
+    g.StrokeRound(r, 12.f, hover ? t.accent.Alpha(0.45f) : t.cardBorder);
+}
+
+void Ui::Panel(const Rect& r, Color tint, bool glow) {
+    // Glass panel tinted towards `tint`, with a glowing edge in the same colour.
+    Color top = t.dark ? t.card.Mix(tint, 0.16f) : t.card.Mix(tint, 0.05f);
+    Color bottom = t.dark ? t.card.Mix(Color{0, 0, 0, t.card.a}, 0.25f) : t.card;
+    g.FillGradient(r, 14.f, top, bottom);
+    if (glow) g.GlowStroke(r, 14.f, tint.Alpha(t.dark ? 0.55f : 0.35f), t.dark ? 1.f : 0.5f);
+    else g.StrokeRound(r, 14.f, t.cardBorder);
 }
 
 void Ui::Tooltip(WidgetId id, const std::wstring& text) {
