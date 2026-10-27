@@ -89,7 +89,9 @@ public:
             for (auto it = newUntil_.begin(); it != newUntil_.end();) it = it->second < s->seq ? newUntil_.erase(it) : std::next(it);
         }
         snap_ = s;
+        // Rows point into the snapshot: rebuild now, or drop them until the page is shown again.
         if (app.Current() == PageId::Processes) Rebuild();
+        else rows_.clear();
     }
     void OnShow() override { Rebuild(); }
     void SaveState() override {

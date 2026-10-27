@@ -61,8 +61,19 @@ if(WIN32)
     src/ui/Widgets.cpp
     src/ui/IconCache.cpp
     src/ui/Accessibility.cpp
+    src/ui/pages/OverviewPage.cpp
     src/ui/pages/ProcessesPage.cpp
-    src/ui/pages/DevStubs.cpp
+    src/ui/pages/PerformancePage.cpp
+    src/ui/pages/AppHistoryPage.cpp
+    src/ui/pages/StartupPage.cpp
+    src/ui/pages/UsersPage.cpp
+    src/ui/pages/DetailsPage.cpp
+    src/ui/pages/ServicesPage.cpp
+    src/ui/pages/HardwarePage.cpp
+    src/ui/pages/NetworkPage.cpp
+    src/ui/pages/StoragePage.cpp
+    src/ui/pages/DiagnosticsPage.cpp
+    src/ui/pages/SettingsPage.cpp
     src/ui/ProcessWindow.cpp
     res/nexus.rc
   )

@@ -155,8 +155,11 @@ void Table::Draw(Ui& ui, const Rect& r, TableSource& src) {
     }
     WidgetId bodyId = IdMix(id_, 2);
     ui.Hit(bodyId, body);
-    float wh = ui.Wheel(body);
-    if (wh != 0) scrollY -= wh * rowH * 3;
+    // Only take the wheel when there is something to scroll, so enclosing views can scroll.
+    if (contentH > body.h) {
+        float wh = ui.Wheel(body);
+        if (wh != 0) scrollY -= wh * rowH * 3;
+    }
     scrollY = std::clamp(scrollY, 0.f, std::max(0.f, contentH - body.h));
 
     g.PushClip(body);
