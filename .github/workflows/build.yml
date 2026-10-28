@@ -1,32 +1,88 @@
 name: build
 on: [push, pull_request]
+
 jobs:
+  # Native Windows build with MSVC, plus the tests that need real Windows: the security tests stage
+  # junction / symlink / hard-link attacks and need elevation (GitHub's Windows runners are elevated).
   msvc:
     runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Configure
         run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DNEXUS_BUILD_TESTS=ON
       - name: Build
-        run: cmake --build build --config Release --parallel
-      - name: Unit tests
-        run: ctest --test-dir build -C Release --output-on-failure
-      - name: Collector smoke test
+        shell: pwsh
         run: |
-          .\build\Release\NEXUS.exe --bench bench.json 20 | Out-Null
-          Start-Sleep -Seconds 5
-          Get-Content bench.json
+          cmake --build build --config Release --parallel 2>&1 | Tee-Object -FilePath build.log
+          $failed = $LASTEXITCODE -ne 0
+          # Surface compiler diagnostics as annotations (readable without downloading logs).
+          Select-String -Path build.log -Pattern '(error|warning) (C|LNK)\d+' |
+            Select-Object -First 60 |
+            ForEach-Object { $l = $_.Line.Trim(); if ($l -match ' error ') { "::error::$l" } else { "::warning::$l" } }
+          if ($failed) { exit 1 }
+      - name: Unit tests
+        shell: pwsh
+        run: |
+          .\build\Release\nexus_tests.exe 2>&1 | Tee-Object -FilePath tests.log
+          $code = $LASTEXITCODE
+          Select-String -Path tests.log -Pattern '^FAIL|passed' | ForEach-Object { if ($_.Line -match '^FAIL') { "::error::$($_.Line)" } else { "::notice::unit tests: $($_.Line)" } }
+          exit $code
+      - name: Security tests (elevated)
+        shell: pwsh
+        run: |
+          .\build\Release\nexus_security_tests.exe 2>&1 | Tee-Object -FilePath security.log
+          $code = $LASTEXITCODE
+          Select-String -Path security.log -Pattern '^FAIL|^skip|passed' |
+            ForEach-Object { if ($_.Line -match '^FAIL') { "::error::$($_.Line)" } elseif ($_.Line -match '^skip') { "::warning::security tests $($_.Line)" } else { "::notice::security tests: $($_.Line)" } }
+          exit $code
+      - name: Collector benchmark
+        shell: pwsh
+        run: |
+          $p = Start-Process .\build\Release\NEXUS.exe -ArgumentList '--bench', "$PWD\bench.json", '50' -PassThru -Wait
+          $b = Get-Content bench.json -Raw | ConvertFrom-Json
+          "::notice::collector: $($b.processes) processes, $([math]::Round($b.enumerateAvgMs, 2)) ms average per sample (max $([math]::Round($b.enumerateMaxMs, 2)) ms), working set $([math]::Round($b.workingSetBytes / 1MB, 1)) MB, private $([math]::Round($b.privateBytes / 1MB, 1)) MB"
+      - name: UI stress (60 s)
+        shell: pwsh
+        run: |
+          $csv = "$PWD\stress.csv"
+          $p = Start-Process .\build\Release\NEXUS.exe -ArgumentList '--stress', '60', "`"$csv`"", '7' -PassThru
+          if (-not $p.WaitForExit(240000)) { "::error::stress run did not finish (hang)"; Stop-Process $p -Force; exit 1 }
+          if (-not (Test-Path "$csv.summary.txt")) { "::error::stress run wrote no summary (exit code $($p.ExitCode))"; exit 1 }
+          Get-Content "$csv.summary.txt" | Select-Object -First 12 | ForEach-Object { "::notice::stress: $_" }
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: NEXUS-msvc
-          path: build/Release/NEXUS.exe
+          path: |
+            build/Release/NEXUS.exe
+            build/Release/nexus_tests.exe
+            build/Release/nexus_security_tests.exe
+            *.log
+            stress.csv*
+            bench.json
+
+  # Cross-compiled MinGW build: installer and portable zip.
   mingw-cross:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: sudo apt-get update && sudo apt-get install -y ninja-build g++-mingw-w64-x86-64-posix nsis zip
       - run: ./scripts/package.sh
       - uses: actions/upload-artifact@v4
         with:
           name: NEXUS-dist
           path: dist/*
+
+  # Platform-neutral core on Linux with sanitizers, plus a short fuzzing run.
+  core-linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - run: sudo apt-get update && sudo apt-get install -y clang libclang-rt-18-dev
+      - name: Unit tests (ASan + UBSan)
+        run: |
+          clang++ -std=c++20 -g -O1 -fsanitize=address,undefined -fno-sanitize-recover=all -Isrc -DNEXUS_VERSION_STR='"ci"' \
+            tests/tests.cpp src/core/{Format,Settings,Smbios,DiagnosticsRules,Filter,Regex}.cpp -o tests_asan
+          ./tests_asan
+      - name: Fuzz (5 min)
+        run: tests/fuzz/run.sh "$RUNNER_TEMP/fuzz" 300
