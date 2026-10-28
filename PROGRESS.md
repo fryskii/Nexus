@@ -54,6 +54,14 @@ Five bugs were found and fixed (regex freeze/stack overflow, numeric UB, setting
 starvation, per-frame resource creation). Still to do on Windows 11: `scripts\stress.ps1` for 30+ minutes
 with 300 churned processes; check private bytes, handles and GDI/USER objects (Wine reports 0).
 
+## Continuous integration
+
+GitHub Actions (`.github/workflows/build.yml`) on every push: MSVC build on Windows with unit tests,
+elevated security tests (25/25, nothing skipped), collector benchmark and a 60 s stress run; MinGW
+cross build producing the installer and portable zip; Linux sanitizer tests and 5 minutes of fuzzing.
+`soak.yml` (manual): long stress with process churn. A 20-minute soak showed no leak. The first MSVC
+builds found real bugs (UTF-8 source handling, SDK macro clash, a missing header, link dependencies).
+
 ## Security hardening
 
 See docs/SECURITY.md. Done: elevated helpers validate arguments and confirm risky actions in the

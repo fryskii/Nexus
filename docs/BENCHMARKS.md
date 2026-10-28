@@ -2,7 +2,18 @@
 
 ## Status
 
-**No Windows benchmark results exist yet.** NEXUS was built and tested in a Linux environment under Wine, which does not reproduce Windows
+**First Windows numbers (GitHub Actions `windows-2022` virtual machine, not a desktop PC):**
+
+| Measurement | Result |
+|---|---|
+| Collection (`NEXUS.exe --bench`, 138 processes) | 1.1 ms per sample (max 1.6 ms); collector alone 8.4 MB working set, 2.4 MB private |
+| UI under stress (`--stress`, about 33 forced redraws per second) | median frame 5.9 ms, p95 15.6 ms; 10–15% of one core |
+| 20-minute soak with 300 churned processes | private memory 102 → 103 MB (second vs last quarter), handles 1,492 → 1,483, GDI 68 → 68: no leak |
+
+These come from a server VM without a GPU and are not a comparison with Task Manager. The comparison
+below (`scripts/benchmark.ps1`) still has to be run on a real PC.
+
+**Earlier status: no Windows benchmark results existed.** NEXUS was built and tested in a Linux environment under Wine, which does not reproduce Windows
 performance characteristics:
 - Direct2D runs on wined3d and llvmpipe,
 - many performance counters are stubs,

@@ -1,5 +1,7 @@
 # NEXUS
 
+[![build](https://github.com/fryskii/Nexus/actions/workflows/build.yml/badge.svg)](https://github.com/fryskii/Nexus/actions/workflows/build.yml)
+
 A native Windows 11 task manager and system monitor written in C++20 on Win32, Direct2D and DirectWrite.
 It aims to cover everything Task Manager does, show much more detail, and use few resources.
 

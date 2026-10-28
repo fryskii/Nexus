@@ -56,7 +56,21 @@ ten burns CPU. It copies itself to those names in its own folder.
 
 If a run is interrupted, end any leftover `churn-*.exe` processes from Task Manager or NEXUS.
 
-## Results so far
+## Results on Windows (GitHub Actions)
+
+`build.yml` runs on every push: unit tests, the elevated security tests (25 checks, none skipped:
+junction, symbolic-link and hard-link attacks are staged for real), the collector benchmark and a
+60-second stress run. `soak.yml` runs a long stress with process churn on demand.
+
+20-minute soak, 300 churned processes, full action mix: no crash or hang; 51,107 frames (median 5.9 ms,
+p95 15.6 ms, max 1.6 s once); 2,180 snapshots (median 1.7 ms); CPU 14.9% of one core under forced
+redraws. Second-quarter vs last-quarter medians: private memory 102.3 → 103.3 MB (+0.9%), handles
+1,492 → 1,483, GDI objects 68 → 68, USER objects 33 → 32, threads 15 → 14. No leak.
+
+The MSVC build also exposed a bug that MinGW and Wine hid: the core library was compiled without
+`/utf-8`, so temperatures read "Â°C". All targets are now compiled as UTF-8.
+
+## Results under Wine
 
 Recorded on Linux under Wine 9 with Xvfb (software rendering), 4 cores. Wine does not report
 private bytes, handle or GDI/USER counts (they read 0), its Direct2D draws text as geometry, and
