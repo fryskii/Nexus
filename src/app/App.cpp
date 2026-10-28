@@ -10,8 +10,8 @@
 
 #include <commctrl.h>
 #include <dwmapi.h>
-#define SECURITY_WIN32 // for secext.h
-#include <secext.h>
+#define SECURITY_WIN32 // for GetUserNameExW
+#include <security.h>
 #include <shellapi.h>
 #include <shlobj.h>
 #include <uxtheme.h>

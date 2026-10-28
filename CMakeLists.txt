@@ -8,6 +8,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(NEXUS_BUILD_TESTS "Build unit tests" ON)
 option(NEXUS_STRIP "Strip symbols from release binaries (MinGW)" ON)
 
+# Static C runtime everywhere (no VC++ redistributable needed; all targets must match to link).
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
 endif()
@@ -124,7 +127,6 @@ if(WIN32)
     # Resolve static imports from System32 only (no DLL planting next to NEXUS.exe); see LoadConfig.cpp.
     target_link_options(nexus PRIVATE /DEPENDENTLOADFLAG:0x800)
     target_link_options(nexus PRIVATE /MANIFEST:NO)
-    set_property(TARGET nexus nexus_core PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     target_compile_definitions(nexus PRIVATE _CRT_SECURE_NO_WARNINGS)
   else()
     target_compile_options(nexus PRIVATE -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers

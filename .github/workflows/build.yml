@@ -15,10 +15,12 @@ jobs:
         run: |
           cmake --build build --config Release --parallel 2>&1 | Tee-Object -FilePath build.log
           $failed = $LASTEXITCODE -ne 0
-          # Surface compiler diagnostics as annotations (readable without downloading logs).
-          Select-String -Path build.log -Pattern '(error|warning) (C|LNK)\d+' |
-            Select-Object -First 60 |
-            ForEach-Object { $l = $_.Line.Trim(); if ($l -match ' error ') { "::error::$l" } else { "::warning::$l" } }
+          # Surface compiler diagnostics as annotations (readable without downloading logs). GitHub keeps
+          # only 10 annotations per type and step, so unique lines are packed into one multi-line annotation.
+          $errors = Select-String -Path build.log -Pattern ': (fatal )?error (C|LNK)\d+' | ForEach-Object { $_.Line.Trim() -replace ' \[[^\]]*\]$', '' } | Sort-Object -Unique
+          $warnings = Select-String -Path build.log -Pattern ': warning (C|LNK)\d+' | ForEach-Object { $_.Line.Trim() -replace ' \[[^\]]*\]$', '' } | Sort-Object -Unique
+          if ($errors) { "::error::$($errors.Count) unique errors%0A" + (($errors | Select-Object -First 80) -join '%0A') }
+          if ($warnings) { "::warning::$($warnings.Count) unique warnings%0A" + (($warnings | Select-Object -First 80) -join '%0A') }
           if ($failed) { exit 1 }
       - name: Unit tests
         shell: pwsh
