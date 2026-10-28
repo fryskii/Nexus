@@ -10,6 +10,10 @@ option(NEXUS_STRIP "Strip symbols from release binaries (MinGW)" ON)
 
 # Static C runtime everywhere (no VC++ redistributable needed; all targets must match to link).
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+# Sources are UTF-8 (°, —, …): without this MSVC reads them in the local ANSI code page.
+if(MSVC)
+  add_compile_options(/utf-8)
+endif()
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
@@ -123,7 +127,7 @@ if(WIN32)
   endif()
 
   if(MSVC)
-    target_compile_options(nexus PRIVATE /W4 /permissive- /utf-8 /EHsc /Zc:__cplusplus)
+    target_compile_options(nexus PRIVATE /W4 /permissive- /EHsc /Zc:__cplusplus)
     # Resolve static imports from System32 only (no DLL planting next to NEXUS.exe); see LoadConfig.cpp.
     target_link_options(nexus PRIVATE /DEPENDENTLOADFLAG:0x800)
     target_link_options(nexus PRIVATE /MANIFEST:NO)
