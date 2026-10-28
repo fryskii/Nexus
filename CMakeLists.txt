@@ -80,6 +80,8 @@ if(WIN32)
     res/nexus.rc
   )
   add_executable(nexus WIN32 ${NEXUS_SOURCES})
+  set_source_files_properties(res/nexus.rc PROPERTIES OBJECT_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/res/fonts/Inter-Regular.ttf;${CMAKE_CURRENT_SOURCE_DIR}/res/fonts/Inter-SemiBold.ttf;${CMAKE_CURRENT_SOURCE_DIR}/res/fonts/InterDisplay-SemiBold.ttf;${CMAKE_CURRENT_SOURCE_DIR}/res/fonts/Inter-OFL.txt")
   set_target_properties(nexus PROPERTIES OUTPUT_NAME "NEXUS")
   target_include_directories(nexus PRIVATE src)
   target_compile_definitions(nexus PRIVATE ${NEXUS_DEFS})

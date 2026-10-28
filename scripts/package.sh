@@ -15,6 +15,7 @@ mkdir -p "$DIST/NEXUS-$VERSION-portable-x64"
 P="$DIST/NEXUS-$VERSION-portable-x64"
 cp "$BUILD/NEXUS.exe" "$P/"
 cp "$ROOT/LICENSE" "$P/LICENSE.txt"
+cp "$ROOT/res/fonts/Inter-OFL.txt" "$P/"
 cp "$ROOT/docs/USER_GUIDE.md" "$P/README.txt"
 # The marker file makes NEXUS keep its settings next to the executable.
 printf 'This file makes NEXUS store its settings in this folder (portable mode). Delete it to use %%APPDATA%%\\NEXUS.\r\n' > "$P/portable"

@@ -1,5 +1,7 @@
 #include "ui/Gfx.h"
 
+#include <dwrite_3.h>
+
 #include <algorithm>
 #include <cmath>
 
@@ -32,19 +34,69 @@ const FontSpec kSpecs[] = {
     {12.f, DWRITE_FONT_WEIGHT_NORMAL, 3},   // Mono
 };
 std::wstring g_text = L"Segoe UI", g_display = L"Segoe UI", g_icon = L"Segoe MDL2 Assets";
-bool g_sf = false;          // SF Pro: the Display cut is only used from 20 DIPs up, as Apple recommends
+bool g_inter = false;       // bundled Inter in use: the Display cut is only used from 20 DIPs up
 bool g_fontsResolved = false;
-bool g_sfInstalled = false;
 uint32_t g_fontGen = 1;     // bumped when the families change so cached text formats are rebuilt
+ComPtr<IDWriteFontCollection> g_bundled; // private collection with the embedded Inter faces
+bool g_bundledTried = false;
 
 ComPtr<IDWriteFactory> SharedDWrite() {
     ComPtr<IDWriteFactory> f;
     DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(f.Put()));
     return f;
 }
+
+// Inter (SIL OFL 1.1) is embedded as RCDATA 201-203. The resources stay mapped for the life of the
+// process, so the in-memory font files can reference them without copying.
+constexpr int kInterResources[] = {201, 202, 203};
+
+bool ResourceBytes(int id, const void*& data, UINT32& size) {
+    HMODULE mod = GetModuleHandleW(nullptr);
+    HRSRC res = FindResourceW(mod, MAKEINTRESOURCEW(id), MAKEINTRESOURCEW(10) /* RT_RCDATA */);
+    HGLOBAL h = res ? LoadResource(mod, res) : nullptr;
+    data = h ? LockResource(h) : nullptr;
+    size = res ? SizeofResource(mod, res) : 0;
+    return data && size;
+}
+
+void LoadBundledFonts() {
+    if (g_bundledTried) return;
+    g_bundledTried = true;
+    ComPtr<IDWriteFactory> base = SharedDWrite();
+    ComPtr<IDWriteFactory5> f;
+    if (!base || FAILED(base->QueryInterface(__uuidof(IDWriteFactory5), f.PutVoid()))) return;
+    ComPtr<IDWriteInMemoryFontFileLoader> loader;
+    if (FAILED(f->CreateInMemoryFontFileLoader(loader.Put())) || FAILED(f->RegisterFontFileLoader(loader.Get()))) return;
+    ComPtr<IDWriteFontSetBuilder1> builder1;
+    if (FAILED(f->CreateFontSetBuilder(builder1.Put()))) return;
+    int added = 0;
+    for (int id : kInterResources) {
+        const void* data;
+        UINT32 size;
+        if (!ResourceBytes(id, data, size)) continue;
+        ComPtr<IDWriteFontFile> file;
+        if (FAILED(loader->CreateInMemoryFontFileReference(f.Get(), data, size, nullptr, file.Put()))) continue;
+        if (SUCCEEDED(builder1->AddFontFile(file.Get()))) ++added;
+        // GDI copy for the native search box and dialog templates (private to this process).
+        DWORD installed = 0;
+        AddFontMemResourceEx(const_cast<void*>(data), size, nullptr, &installed);
+    }
+    if (!added) return;
+    ComPtr<IDWriteFontSet> set;
+    ComPtr<IDWriteFontCollection1> coll;
+    if (FAILED(builder1->CreateFontSet(set.Put())) || FAILED(f->CreateFontCollectionFromFontSet(set.Get(), coll.Put()))) return;
+    UINT32 idx = 0;
+    BOOL exists = FALSE;
+    if (FAILED(coll->FindFamilyName(L"Inter", &idx, &exists)) || !exists) return;
+    g_bundled.Attach(coll.Get());
+    g_bundled->AddRef();
+}
 } // namespace
 
-bool Gfx::SfProInstalled() { return g_sfInstalled; }
+bool Gfx::BundledFontAvailable() {
+    LoadBundledFonts();
+    return static_cast<bool>(g_bundled);
+}
 const std::wstring& Gfx::TextFamily() { return g_text; }
 
 bool Gfx::SetUiFont(const std::wstring& pref) {
@@ -55,15 +107,12 @@ bool Gfx::SetUiFont(const std::wstring& pref) {
         return L"";
     };
     std::wstring text, display;
-    g_sfInstalled = !pick({L"SF Pro Text", L"SF Pro", L"SF Pro Display"}).empty();
-    if (pref == L"sf" && g_sfInstalled) {
-        // Static installs register "SF Pro Text"/"SF Pro Display"; the variable font registers "SF Pro".
-        text = pick({L"SF Pro Text", L"SF Pro", L"SF Pro Display"});
-        display = pick({L"SF Pro Display", L"SF Pro", L"SF Pro Text"});
-    }
-    bool found = !text.empty();
-    g_sf = found;
-    if (!found) {
+    bool wantInter = pref != L"segoe"; // "inter" (default); older "sf" settings map here too
+    g_inter = wantInter && BundledFontAvailable();
+    if (g_inter) {
+        text = L"Inter";
+        display = L"Inter Display";
+    } else {
         text = pick({L"Segoe UI Variable Text", L"Segoe UI"});
         display = pick({L"Segoe UI Variable Display", L"Segoe UI"});
         if (text.empty()) text = L"Segoe UI";
@@ -77,7 +126,7 @@ bool Gfx::SetUiFont(const std::wstring& pref) {
         ++g_fontGen;
     }
     g_fontsResolved = true;
-    return found || pref != L"sf";
+    return g_inter || !wantInter;
 }
 
 bool Gfx::Init(HWND hwnd) {
@@ -85,7 +134,7 @@ bool Gfx::Init(HWND hwnd) {
     D2D1_FACTORY_OPTIONS opts{};
     if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory), &opts, factory_.PutVoid()))) return false;
     if (FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(dwrite_.Put())))) return false;
-    if (!g_fontsResolved) SetUiFont(L"sf");
+    if (!g_fontsResolved) SetUiFont(L"inter");
     if (!HasFamily(dwrite_.Get(), monoFamily_.c_str())) monoFamily_ = HasFamily(dwrite_.Get(), L"Consolas") ? L"Consolas" : L"Courier New";
     RECT rc;
     GetClientRect(hwnd, &rc);
@@ -210,10 +259,11 @@ IDWriteTextFormat* Gfx::Format(Font f, Align a, bool vcenter, bool wrap) {
     auto it = formats_.find(key);
     if (it != formats_.end()) return it->second.Get();
     const FontSpec& s = kSpecs[static_cast<int>(f)];
-    int family = s.family == 1 && g_sf && s.size < 20.f ? 0 : s.family;
+    int family = s.family == 1 && g_inter && s.size < 20.f ? 0 : s.family;
     const std::wstring& fam = family == 0 ? g_text : family == 1 ? g_display : family == 2 ? g_icon : monoFamily_;
+    IDWriteFontCollection* coll = g_inter && family <= 1 ? g_bundled.Get() : nullptr;
     ComPtr<IDWriteTextFormat> fmt;
-    if (FAILED(dwrite_->CreateTextFormat(fam.c_str(), nullptr, s.weight, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, s.size, L"", fmt.Put())))
+    if (FAILED(dwrite_->CreateTextFormat(fam.c_str(), coll, s.weight, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, s.size, L"", fmt.Put())))
         return nullptr;
     fmt->SetTextAlignment(a == Align::Left ? DWRITE_TEXT_ALIGNMENT_LEADING : a == Align::Center ? DWRITE_TEXT_ALIGNMENT_CENTER : DWRITE_TEXT_ALIGNMENT_TRAILING);
     fmt->SetParagraphAlignment(vcenter ? DWRITE_PARAGRAPH_ALIGNMENT_CENTER : DWRITE_PARAGRAPH_ALIGNMENT_NEAR);

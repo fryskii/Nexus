@@ -205,7 +205,7 @@ bool App::Create(int nCmdShow, bool startMinimized) {
 
     worker::Init(hwnd_, WM_NX_WORKER, 2);
     ApplyMica();
-    Gfx::SetUiFont(settings_.GetString("ui.font", L"sf"));
+    Gfx::SetUiFont(settings_.GetString("ui.font", L"inter"));
     if (!gfx_.Init(hwnd_)) {
         MessageBoxW(hwnd_, L"Direct2D could not be initialised.", L"NEXUS", MB_ICONERROR);
         return false;
@@ -218,6 +218,7 @@ bool App::Create(int nCmdShow, bool startMinimized) {
     search_ = CreateWindowExW(0, WC_EDITW, L"", WS_CHILD | ES_AUTOHSCROLL, 0, 0, 10, 10, hwnd_, reinterpret_cast<HMENU>(100), wc.hInstance, nullptr);
     SendMessageW(search_, EM_SETCUEBANNER, TRUE, reinterpret_cast<LPARAM>(L"Search processes, apps, or PID\u2026"));
     SetWindowTheme(search_, theme_.dark ? L"DarkMode_Explorer" : L"Explorer", nullptr);
+    SendMessageW(search_, WM_SETFONT, reinterpret_cast<WPARAM>(searchFont_), FALSE);
 
     sampler_ = std::make_unique<Sampler>(hwnd_, WM_NX_SNAPSHOT);
     sampler_->SetNetTraceEnabled(settings_.GetBool("net.etw", true));

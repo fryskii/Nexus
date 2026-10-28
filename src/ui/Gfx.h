@@ -102,10 +102,10 @@ public:
     // Called after the device was recreated so caches (icon bitmaps) can be dropped.
     uint32_t DeviceGeneration() const { return generation_; }
     void SetMonoFamily(const wchar_t* f) { monoFamily_ = f; }
-    // UI typeface for every Gfx in the process: "sf" (SF Pro, if installed) or "segoe". Falls back to
-    // Segoe UI Variable / Segoe UI when the preferred family is missing. Returns true if it was found.
+    // UI typeface for every Gfx in the process: "inter" (bundled Inter, the default) or "segoe".
+    // Falls back to Segoe UI Variable / Segoe UI if the embedded fonts cannot be loaded.
     static bool SetUiFont(const std::wstring& pref);
-    static bool SfProInstalled(); // as found by the last SetUiFont call
+    static bool BundledFontAvailable();
     static const std::wstring& TextFamily();
     void SetTransparentBackground(bool on) { transparent_ = on; }
 

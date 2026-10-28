@@ -16,6 +16,7 @@ if ($Package) {
     New-Item -ItemType Directory -Force -Path $portable | Out-Null
     Copy-Item (Join-Path $build "$Config\NEXUS.exe") $portable
     Copy-Item (Join-Path $root "LICENSE") (Join-Path $portable "LICENSE.txt")
+    Copy-Item (Join-Path $root "res\fonts\Inter-OFL.txt") $portable
     Copy-Item (Join-Path $root "docs\USER_GUIDE.md") (Join-Path $portable "README.txt")
     Set-Content -Path (Join-Path $portable "portable") -Value "This file makes NEXUS store its settings in this folder (portable mode)."
     Compress-Archive -Force -Path $portable -DestinationPath "$portable.zip"

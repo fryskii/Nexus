@@ -38,15 +38,13 @@ public:
             if (nt >= 0 && nt != sel) { cfg.SetString("ui.theme", nt == 1 ? L"light" : nt == 2 ? L"dark" : L"system"); app.ApplyTheme(); }
         }
         {
-            // SF Pro is Apple's font and cannot be redistributed; it is used only when installed on this PC.
-            bool sfInstalled = Gfx::SfProInstalled();
-            bool sf = cfg.GetString("ui.font", L"sf") == L"sf";
-            Rect c = Row(ui, x, w, L"Font", sfInstalled ? L"Typeface for the whole interface."
-                                                        : L"SF Pro is not installed on this PC, so Segoe UI is used. Install SF Pro and restart NEXUS to use it.");
-            int nf = ui.Tabs(Id("set.font"), {c.R() - 200, c.y + (c.h - 32) / 2, 200, 32}, {L"SF Pro", L"Segoe UI"}, sf ? 0 : 1);
-            if (nf >= 0 && (nf == 0) != sf) {
-                cfg.SetString("ui.font", nf == 0 ? L"sf" : L"segoe");
-                Gfx::SetUiFont(nf == 0 ? L"sf" : L"segoe");
+            bool inter = cfg.GetString("ui.font", L"inter") != L"segoe";
+            Rect c = Row(ui, x, w, L"Font", Gfx::BundledFontAvailable() ? L"Inter is included with NEXUS (SIL Open Font License 1.1)."
+                                                                       : L"The bundled Inter font could not be loaded, so Segoe UI is used.");
+            int nf = ui.Tabs(Id("set.font"), {c.R() - 200, c.y + (c.h - 32) / 2, 200, 32}, {L"Inter", L"Segoe UI"}, inter ? 0 : 1);
+            if (nf >= 0 && (nf == 0) != inter) {
+                cfg.SetString("ui.font", nf == 0 ? L"inter" : L"segoe");
+                Gfx::SetUiFont(nf == 0 ? L"inter" : L"segoe");
                 app.ApplyTheme();
             }
         }

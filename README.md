@@ -3,7 +3,7 @@
 A native Windows 11 task manager and system monitor written in C++20 on Win32, Direct2D and DirectWrite.
 It aims to cover everything Task Manager does, show much more detail, and use few resources.
 
-- **No runtime dependencies**: one statically linked `NEXUS.exe` (about 3.5 MB), no .NET, no Electron, no drivers, no services.
+- **No runtime dependencies**: one statically linked `NEXUS.exe` (about 4.3 MB, including the Inter font), no .NET, no Electron, no drivers, no services.
 - **Least privilege**: runs as a standard user. It elevates only when you ask, either by restarting as administrator or through a one-off
   elevated helper for single actions such as starting a service or toggling a machine-wide startup entry.
 - **No telemetry**: NEXUS makes no network connections of its own.
@@ -24,7 +24,7 @@ It aims to cover everything Task Manager does, show much more detail, and use fe
 | Network | Throughput, per-process traffic (ETW, administrator), TCP/UDP endpoints, connection history, adapter counters and errors, ping and DNS tools |
 | Storage | Drive identity, NVMe health log and ATA SMART, temperature, live latency and throughput, partition layout, volumes |
 | System diagnostics | Evidence-based health findings, top consumers per resource, Secure Boot / TPM / VBS, drivers, event-log errors, crashes and bugchecks, HTML report export |
-| Settings | Theme, font (SF Pro when installed, or Segoe UI), accent, scale, compact mode, update speed, history length, units, tray, start with Windows, replace Task Manager, sidebar customization, history recording, shortcuts |
+| Settings | Theme, font (bundled Inter or Segoe UI), accent, scale, compact mode, update speed, history length, units, tray, start with Windows, replace Task Manager, sidebar customization, history recording, shortcuts |
 
 Also included:
 - a per-process inspector window with tabs for threads, modules, memory map, handles, environment, token and privileges, network connections and performance graphs;
@@ -38,6 +38,10 @@ Also included:
 - **Portable**: unzip `NEXUS-<version>-portable-x64.zip` and run `NEXUS.exe`. The `portable` file next to it keeps settings in that folder.
 
 Requires Windows 10 1809 or later on x64. It is designed for Windows 11.
+
+## Third-party
+
+- [Inter](https://rsms.me/inter/) typeface, © The Inter Project Authors, SIL Open Font License 1.1 (`res/fonts/Inter-OFL.txt`).
 
 ## Documentation
 

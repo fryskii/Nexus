@@ -31,3 +31,9 @@ BEGIN
     VALUE "Translation", 0x409, 1200
   END
 END
+
+// Inter (SIL Open Font License 1.1, see fonts/Inter-OFL.txt), loaded privately by Gfx.
+201 RCDATA "fonts/Inter-Regular.ttf"
+202 RCDATA "fonts/Inter-SemiBold.ttf"
+203 RCDATA "fonts/InterDisplay-SemiBold.ttf"
+204 RCDATA "fonts/Inter-OFL.txt"
