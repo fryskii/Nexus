@@ -1,4 +1,5 @@
 #include "core/Format.h"
+#include "core/SafeFile.h"
 #include "core/Win.h"
 #include "data/ProcessOps.h"
 
@@ -127,6 +128,10 @@ std::wstring DefaultDumpPath(const std::wstring& processName) {
     std::wstring base = processName;
     size_t dot = base.rfind(L'.');
     if (dot != std::wstring::npos) base.resize(dot);
+    // The name comes from the process itself: keep it to a plain file name.
+    for (wchar_t& c : base)
+        if (c < 32 || wcschr(L"\\/:*?\"<>|", c)) c = L'_';
+    if (base.empty() || base.find_first_not_of(L'.') == std::wstring::npos) base = L"process";
     std::wstring p = std::wstring(tmp, n) + base + L".DMP";
     for (int i = 1; FileExists(p) && i < 1000; ++i) p = std::wstring(tmp, n) + base + L" (" + std::to_wstring(i) + L").DMP";
     return p;
@@ -136,8 +141,21 @@ DWORD WriteProcessDump(uint32_t pid, const std::wstring& path, bool full) {
     Handle h(OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_DUP_HANDLE, FALSE, pid));
     if (!h) h.Reset(OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid));
     if (!h) return Err();
-    Handle f(CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr));
-    if (!f) return Err();
+    // A new file only (never an existing one, which could be a planted link), refused through links
+    // when elevated; and readable by administrators only, since it holds the process's memory.
+    SafeWriteGuard guard;
+    if (!guard.Prepare(path)) return ERROR_ACCESS_DENIED;
+    HANDLE raw = guard.Open(path, GENERIC_WRITE | WRITE_DAC, CREATE_NEW);
+    if (raw == INVALID_HANDLE_VALUE) {
+        DWORD e = Err();
+        return e ? e : ERROR_ACCESS_DENIED;
+    }
+    Handle f(raw);
+    if (IsElevated() && !RestrictToAdministrators(f.Get())) {
+        f.Reset();
+        DeleteFileW(path.c_str());
+        return ERROR_ACCESS_DENIED;
+    }
     MINIDUMP_TYPE type = static_cast<MINIDUMP_TYPE>(
         full ? (MiniDumpWithFullMemory | MiniDumpWithHandleData | MiniDumpWithUnloadedModules | MiniDumpWithFullMemoryInfo | MiniDumpWithThreadInfo |
                 MiniDumpWithTokenInformation)

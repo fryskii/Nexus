@@ -48,6 +48,7 @@ Requires Windows 10 1809 or later on x64. It is designed for Windows 11.
 - [User guide](docs/USER_GUIDE.md)
 - [Building from source](docs/BUILDING.md)
 - [Stress testing](docs/STRESS_TESTING.md)
+- [Security](docs/SECURITY.md)
 - [Feature parity with Task Manager](docs/FEATURE_PARITY.md)
 - [Known limitations and unsupported data](docs/LIMITATIONS.md)
 - [Benchmark methodology and results](docs/BENCHMARKS.md)

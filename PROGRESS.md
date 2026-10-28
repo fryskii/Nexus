@@ -54,6 +54,15 @@ Five bugs were found and fixed (regex freeze/stack overflow, numeric UB, setting
 starvation, per-frame resource creation). Still to do on Windows 11: `scripts\stress.ps1` for 30+ minutes
 with 300 churned processes; check private bytes, handles and GDI/USER objects (Wine reports 0).
 
+## Security hardening
+
+See docs/SECURITY.md. Done: elevated helpers validate arguments and confirm risky actions in the
+elevated window; Task Manager replacement only from an admin-protected install; DLL planting blocked
+(delay-load + System32-only search); elevated file writes guarded against junction/symlink/hard-link
+redirection (SafeWriteGuard); history folder confined to the profile when elevated; dumps restricted to
+administrators; pointer-free window messages; bounded cross-process reads. To do on Windows: run
+`nexus_security_tests.exe` elevated (junction, symlink and ACL checks are skipped under Wine).
+
 ## Validation plan (next session on Windows 11)
 
 1. Build with MSVC: `scripts\build.ps1`. Fix any compiler differences; MinGW was the only compiler used so far.

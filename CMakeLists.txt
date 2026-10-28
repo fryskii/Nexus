@@ -38,6 +38,7 @@ if(WIN32)
     src/app/Stress.cpp
     src/app/Tray.cpp
     src/app/MiniMonitor.cpp
+    src/core/SafeFile.cpp
     src/core/Win.cpp
     src/data/Pdh.cpp
     src/data/Sampler.cpp
@@ -151,6 +152,14 @@ if(NEXUS_BUILD_TESTS)
   endif()
   add_test(NAME nexus_tests COMMAND nexus_tests)
   if(WIN32)
+    # Elevated-write protections, tested against real junction / hard-link / symlink attacks (run elevated).
+    add_executable(nexus_security_tests tests/security_tests.cpp src/core/SafeFile.cpp src/core/Win.cpp)
+    target_include_directories(nexus_security_tests PRIVATE src)
+    target_compile_definitions(nexus_security_tests PRIVATE ${NEXUS_DEFS})
+    target_link_libraries(nexus_security_tests PRIVATE nexus_core advapi32 shell32 shlwapi ole32 version)
+    if(NOT MSVC)
+      target_link_options(nexus_security_tests PRIVATE -static)
+    endif()
     # Process-churn load generator for stress runs (see docs/STRESS_TESTING.md).
     add_executable(nexus_churn tests/stress/churn.cpp)
     target_compile_definitions(nexus_churn PRIVATE UNICODE _UNICODE)

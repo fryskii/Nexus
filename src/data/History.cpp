@@ -1,5 +1,6 @@
 #include "data/History.h"
 #include "core/Format.h"
+#include "core/SafeFile.h"
 #include "core/Win.h"
 
 #include <shlobj.h>
@@ -51,9 +52,14 @@ std::string HistoryCsvLine(const HistoryPoint& p) {
 }
 
 bool WriteFileAtomic(const std::wstring& path, const std::string& data, std::wstring& error) {
+    // Write a new temporary file and rename it over the target: an existing file (which could be a
+    // link planted by another program) is never opened for writing. See SafeFile.h.
+    SafeWriteGuard guard;
+    if (!guard.Prepare(path, &error)) return false;
     std::wstring tmp = path + L".tmp";
-    HANDLE h = CreateFileW(tmp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE) { error = LastErrorMessage(); return false; }
+    DeleteFileW(tmp.c_str()); // leftover from an interrupted save; removes a link itself, never its target
+    HANDLE h = guard.Open(tmp, GENERIC_WRITE, CREATE_NEW, &error);
+    if (h == INVALID_HANDLE_VALUE) return false;
     DWORD written = 0;
     BOOL ok = WriteFile(h, data.data(), static_cast<DWORD>(data.size()), &written, nullptr) && written == data.size();
     FlushFileBuffers(h);
@@ -98,6 +104,9 @@ void HistoryRecorder::Configure(bool enabled, const std::wstring& folder, int re
     retentionDays_ = std::max(1, retentionDays);
     every_ = std::max(1, every);
     folder_ = folder;
+    // Elevated, a folder chosen in the (user-editable) settings file must be in the user's profile,
+    // so an edited setting cannot make an administrator write or prune files in system folders.
+    if (!folder_.empty() && IsElevated() && !IsInsideUserProfile(folder_)) folder_.clear();
     if (folder_.empty()) {
         PWSTR p = nullptr;
         if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &p))) {
@@ -128,9 +137,12 @@ void HistoryRecorder::Flush() {
     wchar_t name[64];
     swprintf(name, 64, L"\\nexus-%04u-%02u-%02u.csv", st.wYear, st.wMonth, st.wDay);
     std::wstring path = folder_ + name;
-    bool exists = FileExists(path);
-    HANDLE h = CreateFileW(path.c_str(), FILE_APPEND_DATA, FILE_SHARE_READ, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE) return;
+    SafeWriteGuard guard;
+    if (!guard.Prepare(path)) { pending_.clear(); return; }
+    HANDLE h = guard.Open(path, FILE_APPEND_DATA, OPEN_ALWAYS);
+    if (h == INVALID_HANDLE_VALUE) { pending_.clear(); return; }
+    LARGE_INTEGER size{};
+    bool exists = GetFileSizeEx(h, &size) && size.QuadPart > 0;
     std::string data = exists ? pending_ : HistoryCsvHeader() + pending_;
     DWORD w = 0;
     WriteFile(h, data.data(), static_cast<DWORD>(data.size()), &w, nullptr);
