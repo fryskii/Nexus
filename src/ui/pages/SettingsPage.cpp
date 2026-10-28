@@ -38,6 +38,19 @@ public:
             if (nt >= 0 && nt != sel) { cfg.SetString("ui.theme", nt == 1 ? L"light" : nt == 2 ? L"dark" : L"system"); app.ApplyTheme(); }
         }
         {
+            // SF Pro is Apple's font and cannot be redistributed; it is used only when installed on this PC.
+            bool sfInstalled = Gfx::SfProInstalled();
+            bool sf = cfg.GetString("ui.font", L"sf") == L"sf";
+            Rect c = Row(ui, x, w, L"Font", sfInstalled ? L"Typeface for the whole interface."
+                                                        : L"SF Pro is not installed on this PC, so Segoe UI is used. Install SF Pro and restart NEXUS to use it.");
+            int nf = ui.Tabs(Id("set.font"), {c.R() - 200, c.y + (c.h - 32) / 2, 200, 32}, {L"SF Pro", L"Segoe UI"}, sf ? 0 : 1);
+            if (nf >= 0 && (nf == 0) != sf) {
+                cfg.SetString("ui.font", nf == 0 ? L"sf" : L"segoe");
+                Gfx::SetUiFont(nf == 0 ? L"sf" : L"segoe");
+                app.ApplyTheme();
+            }
+        }
+        {
             Rect c = Row(ui, x, w, L"Accent color", L"Used for selection, graphs highlights and controls.");
             // 0 = NEXUS blue ("system"), 1 = the Windows accent ("windows"), then fixed colours.
             static const uint32_t swatches[] = {0x2B7BFF, 0, 0x8764B8, 0xC239B3, 0xE74856, 0xF7630C, 0x10893E, 0x00B7C3, 0x515C6B};

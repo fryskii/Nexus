@@ -205,6 +205,7 @@ bool App::Create(int nCmdShow, bool startMinimized) {
 
     worker::Init(hwnd_, WM_NX_WORKER, 2);
     ApplyMica();
+    Gfx::SetUiFont(settings_.GetString("ui.font", L"sf"));
     if (!gfx_.Init(hwnd_)) {
         MessageBoxW(hwnd_, L"Direct2D could not be initialised.", L"NEXUS", MB_ICONERROR);
         return false;
@@ -303,7 +304,7 @@ void App::ApplyTheme() {
     gfx_.SetDpi(dpi_ * scale);
     if (searchFont_) DeleteObject(searchFont_);
     searchFont_ = CreateFontW(-MulDiv(13, static_cast<int>(dpi_ * scale), 96), 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0,
-                              L"Segoe UI");
+                              Gfx::TextFamily().c_str());
     if (search_) SendMessageW(search_, WM_SETFONT, reinterpret_cast<WPARAM>(searchFont_), TRUE);
     if (mini_) mini_->OnThemeChanged();
     Invalidate();

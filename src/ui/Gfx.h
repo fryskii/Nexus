@@ -102,6 +102,11 @@ public:
     // Called after the device was recreated so caches (icon bitmaps) can be dropped.
     uint32_t DeviceGeneration() const { return generation_; }
     void SetMonoFamily(const wchar_t* f) { monoFamily_ = f; }
+    // UI typeface for every Gfx in the process: "sf" (SF Pro, if installed) or "segoe". Falls back to
+    // Segoe UI Variable / Segoe UI when the preferred family is missing. Returns true if it was found.
+    static bool SetUiFont(const std::wstring& pref);
+    static bool SfProInstalled(); // as found by the last SetUiFont call
+    static const std::wstring& TextFamily();
     void SetTransparentBackground(bool on) { transparent_ = on; }
 
 private:
@@ -120,6 +125,7 @@ private:
     UINT widthPx_ = 1, heightPx_ = 1;
     float dpi_ = 96.f;
     uint32_t generation_ = 0;
+    uint32_t fontGen_ = 0;
     std::wstring iconFamily_, monoFamily_ = L"Cascadia Mono";
     bool transparent_ = false;
 };

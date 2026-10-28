@@ -7,6 +7,7 @@ namespace nx {
 
 namespace {
 bool HasFamily(IDWriteFactory* f, const wchar_t* name) {
+    if (!f) return false;
     ComPtr<IDWriteFontCollection> coll;
     if (FAILED(f->GetSystemFontCollection(coll.Put(), FALSE))) return false;
     UINT32 idx = 0;
@@ -31,16 +32,60 @@ const FontSpec kSpecs[] = {
     {12.f, DWRITE_FONT_WEIGHT_NORMAL, 3},   // Mono
 };
 std::wstring g_text = L"Segoe UI", g_display = L"Segoe UI", g_icon = L"Segoe MDL2 Assets";
+bool g_sf = false;          // SF Pro: the Display cut is only used from 20 DIPs up, as Apple recommends
+bool g_fontsResolved = false;
+bool g_sfInstalled = false;
+uint32_t g_fontGen = 1;     // bumped when the families change so cached text formats are rebuilt
+
+ComPtr<IDWriteFactory> SharedDWrite() {
+    ComPtr<IDWriteFactory> f;
+    DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(f.Put()));
+    return f;
+}
 } // namespace
+
+bool Gfx::SfProInstalled() { return g_sfInstalled; }
+const std::wstring& Gfx::TextFamily() { return g_text; }
+
+bool Gfx::SetUiFont(const std::wstring& pref) {
+    ComPtr<IDWriteFactory> f = SharedDWrite();
+    auto pick = [&](std::initializer_list<const wchar_t*> names) -> std::wstring {
+        for (const wchar_t* n : names)
+            if (HasFamily(f.Get(), n)) return n;
+        return L"";
+    };
+    std::wstring text, display;
+    g_sfInstalled = !pick({L"SF Pro Text", L"SF Pro", L"SF Pro Display"}).empty();
+    if (pref == L"sf" && g_sfInstalled) {
+        // Static installs register "SF Pro Text"/"SF Pro Display"; the variable font registers "SF Pro".
+        text = pick({L"SF Pro Text", L"SF Pro", L"SF Pro Display"});
+        display = pick({L"SF Pro Display", L"SF Pro", L"SF Pro Text"});
+    }
+    bool found = !text.empty();
+    g_sf = found;
+    if (!found) {
+        text = pick({L"Segoe UI Variable Text", L"Segoe UI"});
+        display = pick({L"Segoe UI Variable Display", L"Segoe UI"});
+        if (text.empty()) text = L"Segoe UI";
+        if (display.empty()) display = text;
+    }
+    std::wstring icon = HasFamily(f.Get(), L"Segoe Fluent Icons") ? L"Segoe Fluent Icons" : L"Segoe MDL2 Assets";
+    if (text != g_text || display != g_display || icon != g_icon) {
+        g_text = text;
+        g_display = display;
+        g_icon = icon;
+        ++g_fontGen;
+    }
+    g_fontsResolved = true;
+    return found || pref != L"sf";
+}
 
 bool Gfx::Init(HWND hwnd) {
     hwnd_ = hwnd;
     D2D1_FACTORY_OPTIONS opts{};
     if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory), &opts, factory_.PutVoid()))) return false;
     if (FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(dwrite_.Put())))) return false;
-    if (HasFamily(dwrite_.Get(), L"Segoe UI Variable Text")) g_text = L"Segoe UI Variable Text";
-    if (HasFamily(dwrite_.Get(), L"Segoe UI Variable Display")) g_display = L"Segoe UI Variable Display";
-    if (HasFamily(dwrite_.Get(), L"Segoe Fluent Icons")) g_icon = L"Segoe Fluent Icons";
+    if (!g_fontsResolved) SetUiFont(L"sf");
     if (!HasFamily(dwrite_.Get(), monoFamily_.c_str())) monoFamily_ = HasFamily(dwrite_.Get(), L"Consolas") ? L"Consolas" : L"Courier New";
     RECT rc;
     GetClientRect(hwnd, &rc);
@@ -157,10 +202,16 @@ void Gfx::Arc(float cx, float cy, float radius, float startDeg, float sweepDeg, 
 
 IDWriteTextFormat* Gfx::Format(Font f, Align a, bool vcenter, bool wrap) {
     uint32_t key = static_cast<uint32_t>(f) | (static_cast<uint32_t>(a) << 8) | (vcenter ? 1u << 10 : 0) | (wrap ? 1u << 11 : 0);
+    if (fontGen_ != g_fontGen) {
+        formats_.clear();
+        for (auto& e : ellipsis_) e.Reset();
+        fontGen_ = g_fontGen;
+    }
     auto it = formats_.find(key);
     if (it != formats_.end()) return it->second.Get();
     const FontSpec& s = kSpecs[static_cast<int>(f)];
-    const std::wstring& fam = s.family == 0 ? g_text : s.family == 1 ? g_display : s.family == 2 ? g_icon : monoFamily_;
+    int family = s.family == 1 && g_sf && s.size < 20.f ? 0 : s.family;
+    const std::wstring& fam = family == 0 ? g_text : family == 1 ? g_display : family == 2 ? g_icon : monoFamily_;
     ComPtr<IDWriteTextFormat> fmt;
     if (FAILED(dwrite_->CreateTextFormat(fam.c_str(), nullptr, s.weight, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, s.size, L"", fmt.Put())))
         return nullptr;

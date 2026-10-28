@@ -43,7 +43,7 @@ public:
         Word(0); // class
         Str(title);
         Word(9); // point size
-        Str(L"Segoe UI");
+        Str(Gfx::TextFamily().c_str());
     }
     void Add(WORD cls, WORD id, const wchar_t* text, DWORD style, short x, short y, short w, short h) {
         Align4();
@@ -274,7 +274,7 @@ void App::ExportReport() {
     const auto& s = static_.sys;
     const auto& cpu = sampler_->Cpu();
     std::wstring h = L"<!doctype html><html><head><meta charset=\"utf-8\"><title>NEXUS diagnostic report</title><style>"
-                     L"body{font:14px Segoe UI,sans-serif;margin:24px;color:#1b1b1b}h1{font-weight:600}h2{margin-top:28px;border-bottom:1px solid #ddd}"
+                     L"body{font:14px 'SF Pro Text','Segoe UI',sans-serif;margin:24px;color:#1b1b1b}h1{font-weight:600}h2{margin-top:28px;border-bottom:1px solid #ddd}"
                      L"table{border-collapse:collapse}td,th{padding:4px 12px 4px 0;text-align:left;vertical-align:top}th{color:#555;font-weight:600}"
                      L".crit{color:#b00020}.warn{color:#8a5a00}.info{color:#0b5cad}</style></head><body>";
     h += L"<h1>NEXUS diagnostic report</h1><p>Generated " + Html(FormatFileTime(NowFileTime())) + L" UTC by NEXUS " NEXUS_VERSION_STR L"</p>";

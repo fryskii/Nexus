@@ -24,7 +24,7 @@ It aims to cover everything Task Manager does, show much more detail, and use fe
 | Network | Throughput, per-process traffic (ETW, administrator), TCP/UDP endpoints, connection history, adapter counters and errors, ping and DNS tools |
 | Storage | Drive identity, NVMe health log and ATA SMART, temperature, live latency and throughput, partition layout, volumes |
 | System diagnostics | Evidence-based health findings, top consumers per resource, Secure Boot / TPM / VBS, drivers, event-log errors, crashes and bugchecks, HTML report export |
-| Settings | Theme, accent, scale, compact mode, update speed, history length, units, tray, start with Windows, replace Task Manager, sidebar customization, history recording, shortcuts |
+| Settings | Theme, font (SF Pro when installed, or Segoe UI), accent, scale, compact mode, update speed, history length, units, tray, start with Windows, replace Task Manager, sidebar customization, history recording, shortcuts |
 
 Also included:
 - a per-process inspector window with tabs for threads, modules, memory map, handles, environment, token and privileges, network connections and performance graphs;

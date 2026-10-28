@@ -22,6 +22,8 @@ Ctrl+B collapses the sidebar.
   - *Efficiency mode*: runs NEXUS itself with EcoQoS and at least a 2-second update interval.
   - *Dark mode*, *Always on top*, *Show details* (turns compact mode off).
   Hide the panel from the "•••" menu. Values the system does not report show "—" rather than an estimate.
+- **Font**: NEXUS uses SF Pro when it is installed on the PC (Settings → Appearance → Font), and Segoe UI otherwise.
+  SF Pro is Apple's font and is not included with NEXUS; its licence is Apple's, so install it only if your use is covered.
 - Status messages appear briefly as a pill at the bottom of the page. There is no separate status bar.
 
 ## Processes
