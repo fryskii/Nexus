@@ -1,8 +1,10 @@
 #include "core/Filter.h"
 #include "core/Format.h"
 
+#include "core/Regex.h"
+
+#include <cmath>
 #include <cwchar>
-#include <regex>
 
 namespace nx {
 
@@ -13,7 +15,7 @@ struct ProcessFilter::Term {
     bool greater = true;
     double value = 0;
     std::wstring text;
-    std::wregex re;
+    SafeRegex re;
 };
 
 ProcessFilter::ProcessFilter() = default;
@@ -69,16 +71,17 @@ bool ProcessFilter::Compile(const std::wstring& query, std::wstring* error) {
         else if (lower.compare(0, 3, L"re:") == 0) pattern = tok.substr(3);
 
         if (!pattern.empty()) {
-            try {
-                t->re = std::wregex(pattern, std::regex::ECMAScript | std::regex::icase | std::regex::optimize);
-                t->kind = Term::Regex;
-            } catch (const std::regex_error&) {
+            std::wstring why;
+            if (!t->re.Compile(pattern, &why)) {
                 ok = false;
-                if (error) *error = L"Invalid regular expression: " + pattern;
+                if (error) *error = L"Invalid regular expression: " + why;
                 continue;
             }
+            t->kind = Term::Regex;
         } else if (prefixed(L"pid:", Term::Pid) || prefixed(L"ppid:", Term::PPid)) {
-            t->value = std::wcstod(t->text.c_str(), nullptr);
+            // Out-of-range or non-numeric ids can never match (-1).
+            double v = std::wcstod(t->text.c_str(), nullptr);
+            t->value = std::isfinite(v) && v >= 0 && v <= 4294967295.0 ? std::floor(v) : -1;
         } else if (prefixed(L"name:", Term::Name) || prefixed(L"path:", Term::Path) || prefixed(L"pub:", Term::Pub) ||
                    prefixed(L"user:", Term::User) || prefixed(L"cmd:", Term::Cmd)) {
             // text already set
@@ -102,7 +105,8 @@ bool ProcessFilter::Compile(const std::wstring& query, std::wstring* error) {
                         uint64_t b = 0;
                         if (!ParseSize(val, b)) {
                             // Bare numbers for mem/io are interpreted as MB, matching the column unit.
-                            b = static_cast<uint64_t>(std::wcstod(val.c_str(), nullptr) * 1024.0 * 1024.0);
+                            double mb = std::wcstod(val.c_str(), nullptr) * 1024.0 * 1024.0;
+                            b = !(mb > 0) ? 0 : mb >= 1.8e19 ? UINT64_MAX : static_cast<uint64_t>(mb);
                         }
                         t->value = static_cast<double>(b);
                     } else {
@@ -129,16 +133,15 @@ bool ProcessFilter::Matches(const FilterSubject& s) const {
             m = has(s.name, t.text) || has(s.description, t.text) || has(s.publisher, t.text) ||
                 std::to_wstring(s.pid) == t.text;
             break;
-        case Term::Pid: m = s.pid == static_cast<uint32_t>(t.value); break;
-        case Term::PPid: m = s.ppid == static_cast<uint32_t>(t.value); break;
+        case Term::Pid: m = t.value >= 0 && s.pid == static_cast<uint32_t>(t.value); break;
+        case Term::PPid: m = t.value >= 0 && s.ppid == static_cast<uint32_t>(t.value); break;
         case Term::Name: m = has(s.name, t.text); break;
         case Term::Path: m = has(s.path, t.text); break;
         case Term::Pub: m = has(s.publisher, t.text); break;
         case Term::User: m = has(s.user, t.text); break;
         case Term::Cmd: m = has(s.commandLine, t.text); break;
         case Term::Regex:
-            m = (s.name && std::regex_search(*s.name, t.re)) || (s.path && std::regex_search(*s.path, t.re)) ||
-                (s.commandLine && std::regex_search(*s.commandLine, t.re));
+            m = (s.name && t.re.Search(*s.name)) || (s.path && t.re.Search(*s.path)) || (s.commandLine && t.re.Search(*s.commandLine));
             break;
         case Term::Num: {
             double v = 0;

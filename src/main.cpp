@@ -12,6 +12,7 @@
 #include <psapi.h>
 #include <shellapi.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -143,8 +144,17 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int nCmdShow) {
 
     bool minimized = false;
     int page = -1;
+    int stressSeconds = 0;
+    unsigned stressSeed = 1;
+    std::wstring stressCsv;
     for (size_t i = 0; i < args.size(); ++i) {
         if (args[i] == L"--minimized" || args[i] == L"/minimized") minimized = true;
+        else if (args[i] == L"--stress" && i + 1 < args.size()) {
+            // --stress <seconds> [csv-path] [seed]
+            stressSeconds = std::max(5, _wtoi(args[++i].c_str()));
+            if (i + 1 < args.size() && args[i + 1].rfind(L"--", 0) != 0) stressCsv = args[++i];
+            if (i + 1 < args.size() && args[i + 1].rfind(L"--", 0) != 0) stressSeed = static_cast<unsigned>(_wtoi(args[++i].c_str()));
+        }
         else if (args[i] == L"--wait-pid" && i + 1 < args.size()) {
             // Restart handoff (e.g. after elevation): wait for the previous instance to exit.
             HANDLE h = OpenProcess(SYNCHRONIZE, FALSE, static_cast<DWORD>(_wtoi(args[++i].c_str())));
@@ -152,8 +162,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int nCmdShow) {
         } else if (args[i] == L"--page" && i + 1 < args.size()) page = _wtoi(args[++i].c_str());
     }
 
-    HANDLE mutex = CreateMutexW(nullptr, TRUE, L"Local\\NEXUS.SingleInstance");
-    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+    // A stress run may start next to a normal instance, so it skips the single-instance check.
+    HANDLE mutex = stressSeconds ? nullptr : CreateMutexW(nullptr, TRUE, L"Local\\NEXUS.SingleInstance");
+    if (mutex && GetLastError() == ERROR_ALREADY_EXISTS) {
         HWND other = FindWindowW(L"NEXUS.MainWindow", nullptr);
         if (other) {
             DWORD pid = 0;
@@ -172,6 +183,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int nCmdShow) {
     int rc = 1;
     {
         App app;
+        if (stressSeconds) app.EnableStress(stressSeconds, stressCsv, stressSeed);
         if (app.Create(nCmdShow, minimized)) {
             if (page >= 0 && page < static_cast<int>(PageId::Count)) app.Navigate(static_cast<PageId>(page));
             rc = app.Run();

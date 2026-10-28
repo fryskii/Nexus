@@ -13,14 +13,18 @@ std::string TrimA(const std::string& s) {
     while (e > b && (s[e - 1] == ' ' || s[e - 1] == '\t' || s[e - 1] == '\r')) --e;
     return s.substr(b, e - b);
 }
-// Values are escaped so that newlines and backslashes round-trip safely.
+// Values are escaped so that newlines, backslashes, tabs and edge spaces (which the parser trims)
+// round-trip safely.
 std::string Escape(const std::string& v) {
     std::string o;
     o.reserve(v.size());
-    for (char c : v) {
+    for (size_t i = 0; i < v.size(); ++i) {
+        char c = v[i];
         if (c == '\\') o += "\\\\";
         else if (c == '\n') o += "\\n";
         else if (c == '\r') o += "\\r";
+        else if (c == '\t') o += "\\t";
+        else if (c == ' ' && (i == 0 || i + 1 == v.size())) o += "\\s";
         else o.push_back(c);
     }
     return o;
@@ -31,7 +35,7 @@ std::string Unescape(const std::string& v) {
     for (size_t i = 0; i < v.size(); ++i) {
         if (v[i] == '\\' && i + 1 < v.size()) {
             char n = v[++i];
-            o.push_back(n == 'n' ? '\n' : n == 'r' ? '\r' : n);
+            o.push_back(n == 'n' ? '\n' : n == 'r' ? '\r' : n == 't' ? '\t' : n == 's' ? ' ' : n);
         } else {
             o.push_back(v[i]);
         }

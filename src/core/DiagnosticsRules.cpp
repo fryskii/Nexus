@@ -63,7 +63,8 @@ float MaxOf(const std::vector<float>& v) { return v.empty() ? 0.f : *std::max_el
 
 std::vector<DiagAlert> EvaluateDiagnostics(const DiagInput& in) {
     std::vector<DiagAlert> out;
-    const double iv = in.intervalSec > 0 ? in.intervalSec : 1.0;
+    // Clamp so sample counts derived from the interval stay finite (NaN/Inf/0 fall back to 1 s).
+    const double iv = std::isfinite(in.intervalSec) && in.intervalSec > 0 ? std::clamp(in.intervalSec, 0.05, 3600.0) : 1.0;
     const size_t minSustain = static_cast<size_t>(std::ceil(60.0 / iv)); // at least 60 s of evidence
 
     // --- System-wide CPU saturation ---

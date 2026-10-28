@@ -1,4 +1,5 @@
 #include "app/App.h"
+#include "app/StressState.h"
 #include "app/MiniMonitor.h"
 #include "app/Tray.h"
 #include "core/Win.h"
@@ -28,7 +29,14 @@ namespace nx {
 
 namespace {
 App* g_app = nullptr;
-constexpr UINT_PTR kTimerStatus = 1, kTimerTooltip = 2, kTimerSave = 3;
+constexpr UINT_PTR kTimerStatus = 1, kTimerTooltip = 2, kTimerSave = 3, kTimerRepaint = 4;
+
+double NowMs() {
+    static const double freq = [] { LARGE_INTEGER f; QueryPerformanceFrequency(&f); return static_cast<double>(f.QuadPart); }();
+    LARGE_INTEGER t;
+    QueryPerformanceCounter(&t);
+    return 1000.0 * static_cast<double>(t.QuadPart) / freq;
+}
 constexpr wchar_t kClassName[] = L"NEXUS.MainWindow";
 
 LRESULT CALLBACK StaticWndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
@@ -127,6 +135,7 @@ void App::LoadSettings() {
 }
 
 void App::SaveSettings() {
+    if (stress_) return; // stress runs change settings at random; never persist them
     for (auto& p : pages_)
         if (p) p->SaveState();
     SaveWindowPlacement();
@@ -411,9 +420,23 @@ void App::ShowStatus(const std::wstring& text, bool error) {
     Invalidate();
 }
 
-void App::Invalidate() { if (hwnd_) InvalidateRect(hwnd_, nullptr, FALSE); }
+// Frame pacing: a new frame starts no sooner than the previous one took to draw. When drawing is
+// slower than the update rate (software rendering, remote sessions), a repaint would otherwise
+// always be pending, and Windows only delivers WM_TIMER when nothing else is queued, so timers
+// (tooltips, status, saving) would never fire. With fast hardware rendering the gap is ~1 ms.
+void App::Invalidate() {
+    if (!hwnd_) return;
+    double now = NowMs();
+    if (now >= nextPaintMs_) {
+        InvalidateRect(hwnd_, nullptr, FALSE);
+    } else if (!repaintPending_) {
+        repaintPending_ = true;
+        SetTimer(hwnd_, kTimerRepaint, static_cast<UINT>(nextPaintMs_ - now) + 1, nullptr);
+    }
+}
 
 UINT App::ShowMenu(const std::vector<MenuItem>& items, float x, float y) {
+    if (stress_) return 0; // stress runs must never block on (or confirm) anything
     std::function<HMENU(const std::vector<MenuItem>&)> build = [&](const std::vector<MenuItem>& list) {
         HMENU m = CreatePopupMenu();
         for (auto& it : list) {
@@ -442,6 +465,7 @@ UINT App::ShowMenu(const std::vector<MenuItem>& items, float x, float y) {
 }
 
 bool App::Confirm(const std::wstring& title, const std::wstring& message, const std::wstring& okText, bool danger) {
+    if (stress_) return false;
     TASKDIALOGCONFIG tc{sizeof tc};
     tc.hwndParent = hwnd_;
     tc.pszWindowTitle = L"NEXUS";
@@ -461,6 +485,7 @@ bool App::Confirm(const std::wstring& title, const std::wstring& message, const 
 }
 
 void App::Info(const std::wstring& title, const std::wstring& message, bool error) {
+    if (stress_) { ShowStatus(title, error); return; }
     input_.lDown = input_.rDown = false;
     TASKDIALOGCONFIG tc{sizeof tc};
     tc.hwndParent = hwnd_;
@@ -951,7 +976,14 @@ void App::ExitApp() {
 
 LRESULT App::WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
     switch (m) {
-    case WM_PAINT: Paint(); return 0;
+    case WM_PAINT: {
+        double start = NowMs();
+        Paint();
+        double end = NowMs();
+        nextPaintMs_ = end + std::min(end - start, 500.0);
+        RecordPaintTime(end - start);
+        return 0;
+    }
     case WM_ERASEBKGND: return 1;
     case WM_NCCALCSIZE: return OnNcCalcSize(wp, lp);
     case WM_NCHITTEST: {
@@ -997,6 +1029,13 @@ LRESULT App::WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         if (HandleKey(static_cast<UINT>(wp))) return 0;
         break;
     case WM_TIMER:
+        if (OnStressTimer(wp)) return 0;
+        if (wp == kTimerRepaint) {
+            KillTimer(h, kTimerRepaint);
+            repaintPending_ = false;
+            InvalidateRect(h, nullptr, FALSE);
+            return 0;
+        }
         if (wp == kTimerStatus) { KillTimer(h, kTimerStatus); status_.clear(); Invalidate(); }
         else if (wp == kTimerTooltip) { KillTimer(h, kTimerTooltip); input_.tooltipReady = true; Invalidate(); }
         else if (wp == kTimerSave) { SaveSettings(); recorder_.Flush(); }
@@ -1065,6 +1104,7 @@ LRESULT App::WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
 }
 
 int App::Run() {
+    if (stress_) StartStress();
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0)) {
         // Route keyboard shortcuts from the search box to the app (Esc, Enter, arrows, Ctrl+...).

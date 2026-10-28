@@ -238,7 +238,8 @@ bool ParseSize(const std::wstring& text, uint64_t& out) {
     else if (unit == L"g" || unit == L"gb") mul = 1024.0 * 1024.0 * 1024.0;
     else if (unit == L"t" || unit == L"tb") mul = 1024.0 * 1024.0 * 1024.0 * 1024.0;
     else return false;
-    out = static_cast<uint64_t>(v * mul + 0.5);
+    double bytes = v * mul + 0.5;
+    out = bytes >= 1.8e19 ? UINT64_MAX : static_cast<uint64_t>(bytes); // saturate instead of overflowing
     return true;
 }
 

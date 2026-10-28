@@ -165,8 +165,17 @@ public:
     void SetSelfEfficiency(bool on);
     bool SelfEfficiency() const { return settings_.GetBool("app.efficiency", false); }
     void ToggleInsights();
+    // Stress mode (Stress.cpp): randomized UI actions plus resource sampling; settings are not saved.
+    void EnableStress(int seconds, const std::wstring& csvPath, unsigned seed);
+    bool Stressing() const { return stress_ != nullptr; }
 
 private:
+    struct StressState;
+    void StartStress();
+    bool OnStressTimer(UINT_PTR id);
+    void StressSampleNow();
+    void FinishStress();
+    void RecordPaintTime(double ms);
     void OnSnapshot();
     void UpdateHistories(const Snapshot& s);
     void UpdateProcHistories(const Snapshot& s);
@@ -236,6 +245,9 @@ private:
     bool ncTracking_ = false;
     bool narrowHeader_ = false;
     std::wstring searchText_;
+    std::unique_ptr<StressState> stress_;
+    double nextPaintMs_ = 0;      // frame pacing (see Invalidate)
+    bool repaintPending_ = false;
     friend class Tray;
 };
 

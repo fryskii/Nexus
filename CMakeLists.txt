@@ -23,6 +23,7 @@ add_library(nexus_core STATIC
   src/core/Smbios.cpp
   src/core/DiagnosticsRules.cpp
   src/core/Filter.cpp
+  src/core/Regex.cpp
 )
 target_include_directories(nexus_core PUBLIC src)
 target_compile_definitions(nexus_core PUBLIC NEXUS_VERSION_STR="${PROJECT_VERSION}")
@@ -33,6 +34,7 @@ if(WIN32)
     src/app/App.cpp
     src/app/Chrome.cpp
     src/app/Commands.cpp
+    src/app/Stress.cpp
     src/app/Tray.cpp
     src/app/MiniMonitor.cpp
     src/core/Win.cpp
@@ -110,4 +112,13 @@ if(NEXUS_BUILD_TESTS)
     target_link_options(nexus_tests PRIVATE -static)
   endif()
   add_test(NAME nexus_tests COMMAND nexus_tests)
+  if(WIN32)
+    # Process-churn load generator for stress runs (see docs/STRESS_TESTING.md).
+    add_executable(nexus_churn tests/stress/churn.cpp)
+    target_compile_definitions(nexus_churn PRIVATE UNICODE _UNICODE)
+    if(NOT MSVC)
+      target_compile_options(nexus_churn PRIVATE -municode)
+      target_link_options(nexus_churn PRIVATE -municode -static)
+    endif()
+  endif()
 endif()

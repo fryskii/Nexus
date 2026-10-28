@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 namespace nx {
 
@@ -89,10 +90,21 @@ void App::Paint() {
 }
 
 void App::DrawBackground(float W, float H) {
-    gfx_.FillGradient({0, 0, W, H}, 0, theme_.bgTop, theme_.bgBottom);
-    gfx_.Glow(W * 0.20f, -H * 0.12f, W * 0.55f, H * 0.45f, theme_.glowA);
-    gfx_.Glow(W * 0.98f, H * 0.10f, W * 0.30f, H * 0.40f, theme_.glowB);
-    gfx_.Glow(W * 0.55f, H * 1.08f, W * 0.65f, H * 0.35f, theme_.glowA.Alpha(theme_.glowA.a * 0.55f));
+    // The gradient and glows only change with size and theme, so they are painted once into a
+    // cached layer (about 40 large translucent fills that would otherwise be redrawn every frame).
+    uint64_t key = 1469598103934665603ULL;
+    for (const Color& c : {theme_.bgTop, theme_.bgBottom, theme_.glowA, theme_.glowB})
+        for (float v : {c.r, c.g, c.b, c.a}) {
+            uint32_t bits;
+            std::memcpy(&bits, &v, sizeof bits);
+            key = (key ^ bits) * 1099511628211ULL;
+        }
+    gfx_.CachedLayer(0, key, {0, 0, W, H}, [&] {
+        gfx_.FillGradient({0, 0, W, H}, 0, theme_.bgTop, theme_.bgBottom);
+        gfx_.Glow(W * 0.20f, -H * 0.12f, W * 0.55f, H * 0.45f, theme_.glowA);
+        gfx_.Glow(W * 0.98f, H * 0.10f, W * 0.30f, H * 0.40f, theme_.glowB);
+        gfx_.Glow(W * 0.55f, H * 1.08f, W * 0.65f, H * 0.35f, theme_.glowA.Alpha(theme_.glowA.a * 0.55f));
+    });
 }
 
 void App::DrawTitleBar(Ui& ui, Rect r) {

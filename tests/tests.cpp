@@ -3,13 +3,16 @@
 #include "core/DiagnosticsRules.h"
 #include "core/Filter.h"
 #include "core/Format.h"
+#include "core/Regex.h"
 #include "core/RingBuffer.h"
 #include "core/Settings.h"
 #include "core/Smbios.h"
 
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <functional>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -88,6 +91,17 @@ static void TestSettings() {
     bad.Parse("\xEF\xBB\xBF# comment\n[section]\nnoequals\n=novalue\nk = v \r\nnum=12abc\n");
     CHECK_EQ_W(bad.GetString("k"), L"v");
     CHECK(bad.GetInt("num", -1) == -1);
+    // Leading/trailing spaces and tabs survive a save and reload (the parser trims unescaped edges).
+    Settings sp;
+    sp.SetString("search", L"  two spaces\t");
+    sp.SetString("tab", L"\tx\t");
+    sp.SetString("one", L" ");
+    Settings sp2;
+    sp2.Parse(sp.Serialize());
+    CHECK_EQ_W(sp2.GetString("search"), L"  two spaces\t");
+    CHECK_EQ_W(sp2.GetString("tab"), L"\tx\t");
+    CHECK_EQ_W(sp2.GetString("one"), L" ");
+    CHECK(sp2.Serialize() == sp.Serialize());
 }
 
 static void TestRingBuffer() {
@@ -104,6 +118,40 @@ static void TestRingBuffer() {
     std::vector<int> tail;
     r.Tail(10, tail);
     CHECK(tail.size() == 2 && tail[0] == 5);
+}
+
+
+static void TestRegex() {
+    auto re = [](const wchar_t* p, const std::wstring& t) {
+        SafeRegex r;
+        return r.Compile(p) && r.Search(t);
+    };
+    auto bad = [](const wchar_t* p) { SafeRegex r; return !r.Compile(p); };
+    CHECK(re(L"chr(o|a)me", L"Chrome.exe"));
+    CHECK(re(L"^svc", L"svchost.exe") && !re(L"^host", L"svchost.exe"));
+    CHECK(re(L"exe$", L"a.exe") && !re(L"exe$", L"a.exe "));
+    CHECK(re(L"a.c", L"abc") && !re(L"a.c", L"a\nc"));
+    CHECK(re(L"[a-c]+x", L"zzABCx") && !re(L"[^a-c]x", L"cx"));
+    CHECK(re(L"\\d{3}-\\d{2,}", L"tel 555-1234") && !re(L"^\\d{3}$", L"5555"));
+    CHECK(re(L"\\bhost\\b", L"svc host x") && !re(L"\\bhost\\b", L"svchost"));
+    CHECK(re(L"\\Bhost", L"svchost"));
+    CHECK(re(L"\\s\\S", L"a b") && re(L"[\\s\\d]x", L"1x") && !re(L"[\\D]", L"123"));
+    CHECK(re(L"\\.exe", L"a.exe") && !re(L"\\.exe", L"aXexe"));
+    CHECK(re(L"\\x41\\u0042", L"ab"));
+    CHECK(re(L"(?:ab)+c", L"ababc") && re(L"a{0}b", L"b") && re(L"x(a|)y", L"xy"));
+    CHECK(re(L"a{2,3}?b", L"aab") && re(L"a{,", L"a{,") && !re(L"[]a]", L"]"));
+    CHECK(re(L"(a*)*b", L"aaab") && re(L"(|a)+$", L"aa"));
+    CHECK(bad(L"(a") && bad(L"a)") && bad(L"[a") && bad(L"a**") && bad(L"*a") && bad(L"(?=a)") && bad(L"(a)\\1") &&
+          bad(L"[z-a]") && bad(L"a{5,2}") && bad(L"a{1001}") && bad(L"\\") && bad(L"\\xZ1"));
+    CHECK(bad(std::wstring(1001, L'a').c_str()));
+    CHECK(bad(L"((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((a))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))"));
+    CHECK(bad(L"(a{1000}){1000}")); // program size limit
+    // Patterns that make backtracking engines (std::regex) run for minutes finish immediately.
+    auto t0 = std::chrono::steady_clock::now();
+    CHECK(!re(L"(a+)+$", std::wstring(5000, L'a') + L"!"));
+    CHECK(!re(L"(a|aa)*b", std::wstring(5000, L'a')));
+    CHECK(!re(L".*x.*y.*z", std::wstring(32767, L'q')));
+    CHECK(std::chrono::steady_clock::now() - t0 < std::chrono::seconds(2));
 }
 
 static void TestFilter() {
@@ -137,6 +185,14 @@ static void TestFilter() {
     CHECK(match(L"!firefox"));
     CHECK(!match(L"!chrome"));
     CHECK(match(L"cmd:renderer user:ALI"));
+    // Out-of-range numbers never match and never overflow.
+    CHECK(!match(L"pid:1e30") && !match(L"pid:-1") && !match(L"ppid:nan"));
+    CHECK(match(L"mem>-5") && !match(L"mem>1e300") && match(L"mem<99999999999999999999TB"));
+    {
+        ProcessFilter f;
+        std::wstring err;
+        CHECK(!f.Compile(L"/(a/", &err) && !err.empty());
+    }
     CHECK(match(L"\"google chrome\""));
     CHECK(match(L"path:\\google\\"));
     ProcessFilter bad;
@@ -230,6 +286,16 @@ static void TestDiagnostics() {
     CHECK(slope > 0.99 && slope < 1.01 && r2 > 0.99);
     CHECK(Mean({1, 2, 3}) == 2.0);
     CHECK(FractionAtLeast({1, 5, 10, 20}, 10) == 0.5);
+    {
+        // Degenerate sampling intervals must not overflow sample-count arithmetic.
+        DiagInput in;
+        in.totalCpu.assign(100, 99.f);
+        for (double iv : {0.0, -1.0, 1e-300, 1e300, std::numeric_limits<double>::infinity(), std::numeric_limits<double>::quiet_NaN()}) {
+            in.intervalSec = iv;
+            EvaluateDiagnostics(in);
+        }
+        CHECK(true);
+    }
 
     DiagInput in;
     in.intervalSec = 1;
@@ -301,6 +367,7 @@ int main() {
     TestSettings();
     TestRingBuffer();
     TestFilter();
+    TestRegex();
     TestSmbios();
     TestDiagnostics();
     std::printf("%d passed, %d failed\n", g_passed, g_failed);

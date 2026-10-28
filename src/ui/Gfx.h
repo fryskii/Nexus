@@ -7,6 +7,7 @@
 #include <dwrite.h>
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -96,7 +97,10 @@ public:
     void PopClip();
     void DrawBitmap(ID2D1Bitmap* bmp, const Rect& r, float opacity = 1.f);
 
-    ID2D1RenderTarget* RT() const { return rt_.Get(); }
+    ID2D1RenderTarget* RT() const { return rt_; }
+    // Paints static content once into an offscreen bitmap (slot = caller-chosen id) and reuses it
+    // while `key`, the rectangle size and the DPI stay the same. Falls back to drawing directly.
+    void CachedLayer(int slot, uint64_t key, const Rect& r, const std::function<void()>& paint);
     ID2D1Factory* Factory() const { return factory_.Get(); }
     IDWriteFactory* DWrite() const { return dwrite_.Get(); }
     // Called after the device was recreated so caches (icon bitmaps) can be dropped.
@@ -117,7 +121,12 @@ private:
     HWND hwnd_ = nullptr;
     ComPtr<ID2D1Factory> factory_;
     ComPtr<IDWriteFactory> dwrite_;
-    ComPtr<ID2D1HwndRenderTarget> rt_;
+    ComPtr<ID2D1HwndRenderTarget> hwndRt_;
+    ID2D1RenderTarget* rt_ = nullptr; // current target: the window, or an offscreen layer while it is painted
+    struct Layer { ComPtr<ID2D1BitmapRenderTarget> rt; ComPtr<ID2D1Bitmap> bmp; uint64_t key = 0; float w = 0, h = 0, dpi = 0; uint32_t gen = 0; };
+    std::unordered_map<int, Layer> layers_;
+    std::unordered_map<uint64_t, ComPtr<ID2D1GradientStopCollection>> gradients_;
+    ID2D1GradientStopCollection* Gradient(Color from, Color to);
     ComPtr<ID2D1SolidColorBrush> brush_;
     ComPtr<IDWriteInlineObject> ellipsis_[static_cast<int>(Font::Count)];
     std::unordered_map<uint32_t, ComPtr<IDWriteTextFormat>> formats_;

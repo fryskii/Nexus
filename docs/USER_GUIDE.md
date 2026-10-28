@@ -36,7 +36,8 @@ Ctrl+B collapses the sidebar.
 - **Search** (Ctrl+F) supports plain text (name, description, publisher, PID) and these terms:
   - `pid:1234`, `ppid:4`, `name:`, `path:`, `pub:`, `user:`, `cmd:`
   - comparisons: `cpu>5`, `mem>500MB`, `gpu>10`, `io>1MB`, `threads>100`, `handles>5000`
-  - regular expressions: `/chrom(e|ium)/` or `re:pattern`
+  - regular expressions: `/chrom(e|ium)/` or `re:pattern` (case-insensitive; `. [] \d \w \s \b ^ $ | () (?:) * + ? {n,m}`;
+    no backreferences or lookaround). Matching takes linear time, so no pattern can freeze the window.
   - negation: `!svchost`. All terms must match.
 - Actions are in the page header (*End task*, *Efficiency mode*), the context menu (right-click or Shift+F10) and on keys:
   - End task (Del) and end process tree

@@ -145,7 +145,10 @@ bool Gfx::Init(HWND hwnd) {
 
 void Gfx::Shutdown() {
     brush_.Reset();
-    rt_.Reset();
+    layers_.clear();
+    gradients_.clear();
+    rt_ = nullptr;
+    hwndRt_.Reset();
     formats_.clear();
     for (auto& e : ellipsis_) e.Reset();
     dwrite_.Reset();
@@ -157,11 +160,15 @@ bool Gfx::CreateTarget() {
         D2D1_RENDER_TARGET_TYPE_DEFAULT, D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, transparent_ ? D2D1_ALPHA_MODE_PREMULTIPLIED : D2D1_ALPHA_MODE_IGNORE),
         dpi_, dpi_);
     D2D1_HWND_RENDER_TARGET_PROPERTIES hp = D2D1::HwndRenderTargetProperties(hwnd_, D2D1::SizeU(widthPx_, heightPx_), D2D1_PRESENT_OPTIONS_NONE);
-    if (FAILED(factory_->CreateHwndRenderTarget(props, hp, rt_.Put()))) {
+    layers_.clear();
+    gradients_.clear();
+    rt_ = nullptr;
+    if (FAILED(factory_->CreateHwndRenderTarget(props, hp, hwndRt_.Put()))) {
         // Hardware unavailable (e.g. remote session quirks): fall back to software rendering.
         props.type = D2D1_RENDER_TARGET_TYPE_SOFTWARE;
-        if (FAILED(factory_->CreateHwndRenderTarget(props, hp, rt_.Put()))) return false;
+        if (FAILED(factory_->CreateHwndRenderTarget(props, hp, hwndRt_.Put()))) return false;
     }
+    rt_ = hwndRt_.Get();
     rt_->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
     if (FAILED(rt_->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, 1), brush_.Put()))) return false;
     ++generation_;
@@ -171,12 +178,12 @@ bool Gfx::CreateTarget() {
 void Gfx::Resize(UINT w, UINT h) {
     widthPx_ = std::max<UINT>(1, w);
     heightPx_ = std::max<UINT>(1, h);
-    if (rt_) rt_->Resize(D2D1::SizeU(widthPx_, heightPx_));
+    if (hwndRt_) hwndRt_->Resize(D2D1::SizeU(widthPx_, heightPx_));
 }
 
 void Gfx::SetDpi(float dpi) {
     dpi_ = dpi;
-    if (rt_) rt_->SetDpi(dpi, dpi);
+    if (hwndRt_) hwndRt_->SetDpi(dpi, dpi);
 }
 
 bool Gfx::Begin() {
@@ -191,7 +198,10 @@ void Gfx::End() {
     HRESULT hr = rt_->EndDraw();
     if (hr == static_cast<HRESULT>(D2DERR_RECREATE_TARGET)) {
         brush_.Reset();
-        rt_.Reset();
+        layers_.clear();
+        gradients_.clear();
+        rt_ = nullptr;
+        hwndRt_.Reset();
         CreateTarget();
         InvalidateRect(hwnd_, nullptr, FALSE);
     }
@@ -345,14 +355,64 @@ void Gfx::Series(const Rect& r, const float* v, size_t n, size_t capacity, float
     rt_->DrawGeometry(lg.Get(), Brush(line), width);
 }
 
-void Gfx::FillGradient(const Rect& r, float radius, Color from, Color to, bool vertical) {
-    if (r.w <= 0 || r.h <= 0) return;
+ID2D1GradientStopCollection* Gfx::Gradient(Color from, Color to) {
+    // Gradient stops are device resources; creating them per draw call is costly, so they are
+    // cached by colour pair (bounded: themes use a few dozen pairs).
+    auto q = [](float v) { return static_cast<uint64_t>(std::clamp(v, 0.f, 1.f) * 255.f + 0.5f); };
+    uint64_t key = q(from.r) | q(from.g) << 8 | q(from.b) << 16 | q(from.a) << 24 | q(to.r) << 32 | q(to.g) << 40 | q(to.b) << 48 | q(to.a) << 56;
+    auto it = gradients_.find(key);
+    if (it != gradients_.end()) return it->second.Get();
+    if (gradients_.size() > 256) gradients_.clear();
     D2D1_GRADIENT_STOP stops[2] = {{0.f, from.D2D()}, {1.f, to.D2D()}};
     ComPtr<ID2D1GradientStopCollection> coll;
-    if (FAILED(rt_->CreateGradientStopCollection(stops, 2, coll.Put()))) return;
+    if (FAILED(rt_->CreateGradientStopCollection(stops, 2, coll.Put()))) return nullptr;
+    ID2D1GradientStopCollection* raw = coll.Get();
+    gradients_[key] = std::move(coll);
+    return raw;
+}
+
+void Gfx::CachedLayer(int slot, uint64_t key, const Rect& r, const std::function<void()>& paint) {
+    if (r.w <= 0 || r.h <= 0) return;
+    Layer& L = layers_[slot];
+    if (!L.bmp || L.key != key || L.w != r.w || L.h != r.h || L.dpi != dpi_ || L.gen != generation_) {
+        L = {};
+        if (!hwndRt_ || rt_ != hwndRt_.Get() ||
+            FAILED(hwndRt_->CreateCompatibleRenderTarget(D2D1::SizeF(r.w, r.h), L.rt.Put()))) {
+            paint();
+            return;
+        }
+        ID2D1RenderTarget* saved = rt_;
+        std::vector<Rect> savedClips;
+        savedClips.swap(clips_);
+        rt_ = L.rt.Get();
+        rt_->BeginDraw();
+        rt_->Clear(D2D1::ColorF(0, 0, 0, 0));
+        rt_->SetTransform(D2D1::Matrix3x2F::Translation(-r.x, -r.y));
+        paint();
+        HRESULT hr = rt_->EndDraw();
+        rt_ = saved;
+        clips_.swap(savedClips);
+        if (FAILED(hr) || FAILED(L.rt->GetBitmap(L.bmp.Put()))) {
+            L = {};
+            paint();
+            return;
+        }
+        L.key = key;
+        L.w = r.w;
+        L.h = r.h;
+        L.dpi = dpi_;
+        L.gen = generation_;
+    }
+    rt_->DrawBitmap(L.bmp.Get(), r.D2D(), 1.f, D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
+}
+
+void Gfx::FillGradient(const Rect& r, float radius, Color from, Color to, bool vertical) {
+    if (r.w <= 0 || r.h <= 0) return;
+    ID2D1GradientStopCollection* coll = Gradient(from, to);
+    if (!coll) return;
     ComPtr<ID2D1LinearGradientBrush> br;
     D2D1_POINT_2F a{r.x, r.y}, b = vertical ? D2D1_POINT_2F{r.x, r.B()} : D2D1_POINT_2F{r.R(), r.y};
-    if (FAILED(rt_->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties(a, b), coll.Get(), br.Put()))) return;
+    if (FAILED(rt_->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties(a, b), coll, br.Put()))) return;
     if (radius > 0) rt_->FillRoundedRectangle(D2D1::RoundedRect(r.D2D(), radius, radius), br.Get());
     else rt_->FillRectangle(r.D2D(), br.Get());
 }
@@ -401,11 +461,9 @@ void Gfx::SeriesGradient(const Rect& r, const float* v, size_t n, size_t capacit
     s2->EndFigure(D2D1_FIGURE_END_OPEN);
     s1->Close();
     s2->Close();
-    D2D1_GRADIENT_STOP stops[2] = {{0.f, fillTop.D2D()}, {1.f, fillTop.Alpha(0).D2D()}};
-    ComPtr<ID2D1GradientStopCollection> coll;
+    ID2D1GradientStopCollection* coll = Gradient(fillTop, fillTop.Alpha(0));
     ComPtr<ID2D1LinearGradientBrush> br;
-    if (SUCCEEDED(rt_->CreateGradientStopCollection(stops, 2, coll.Put())) &&
-        SUCCEEDED(rt_->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties({r.x, r.y}, {r.x, r.B()}), coll.Get(), br.Put())))
+    if (coll && SUCCEEDED(rt_->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties({r.x, r.y}, {r.x, r.B()}), coll, br.Put())))
         rt_->FillGeometry(fillGeo.Get(), br.Get());
     rt_->DrawGeometry(lineGeo.Get(), Brush(line), width);
 }
