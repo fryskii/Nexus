@@ -30,18 +30,18 @@ public:
     virtual size_t RowCount() const = 0;
     virtual void CellText(size_t row, int col, std::wstring& out) const = 0;
     virtual uint64_t RowKey(size_t row) const = 0;
-    virtual float CellHeat(size_t row, int col) const { return -1.f; }
-    virtual int RowDepth(size_t row) const { return 0; }
-    virtual int RowExpander(size_t row) const { return 0; } // 0 none, 1 collapsed, 2 expanded
-    virtual void ToggleExpand(size_t row) {}
-    virtual ID2D1Bitmap* RowIcon(size_t row) { return nullptr; }
-    virtual bool RowIsGroup(size_t row) const { return false; }
+    virtual float CellHeat(size_t /*row*/, int /*col*/) const { return -1.f; }
+    virtual int RowDepth(size_t /*row*/) const { return 0; }
+    virtual int RowExpander(size_t /*row*/) const { return 0; } // 0 none, 1 collapsed, 2 expanded
+    virtual void ToggleExpand(size_t /*row*/) {}
+    virtual ID2D1Bitmap* RowIcon(size_t /*row*/) { return nullptr; }
+    virtual bool RowIsGroup(size_t /*row*/) const { return false; }
     // 0 normal, 1 new (green), 2 exiting (red), 3 dimmed (suspended / disabled)
-    virtual int RowHighlight(size_t row) const { return 0; }
+    virtual int RowHighlight(size_t /*row*/) const { return 0; }
     // Text colour override; alpha 0 (the default) means "use the normal text colour".
-    virtual Color CellColor(size_t row, int col, const Theme& t) const { return Color{0, 0, 0, 0}; }
+    virtual Color CellColor(size_t /*row*/, int /*col*/, const Theme& /*t*/) const { return Color{0, 0, 0, 0}; }
     // Small badge drawn before the cell text: 1 = efficiency-mode leaf.
-    virtual int CellBadge(size_t row, int col) const { return 0; }
+    virtual int CellBadge(size_t /*row*/, int /*col*/) const { return 0; }
 };
 
 class Table {

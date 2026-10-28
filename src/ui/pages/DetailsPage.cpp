@@ -99,7 +99,7 @@ public:
         if (r >= 0) s += L" Selected " + rows_[r]->Name() + L", PID " + std::to_wstring(rows_[r]->pid) + L".";
         return s;
     }
-    bool OnKey(UINT vk, bool ctrl, bool shift) override {
+    bool OnKey(UINT vk, bool /*ctrl*/, bool shift) override {
         const ProcSample* p = Selected();
         if (vk == VK_DELETE && p) { actions::EndTask(app, *p); return true; }
         if (vk == VK_RETURN && p) { app.OpenProcessWindow(p->pid); return true; }

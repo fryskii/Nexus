@@ -507,7 +507,7 @@ void Sampler::CollectGpu(Snapshot& s, uint32_t dem) {
     }
 }
 
-void Sampler::CollectServices(Snapshot& s) {
+void Sampler::CollectServices(Snapshot& /*s*/) {
     Impl& m = *impl_;
     uint64_t now = GetTickCount64();
     if (m.services && now - m.servicesTick < 10000) return;

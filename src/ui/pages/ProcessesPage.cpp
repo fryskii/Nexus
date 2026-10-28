@@ -155,7 +155,7 @@ public:
         return s;
     }
 
-    bool OnKey(UINT vk, bool ctrl, bool shift) override {
+    bool OnKey(UINT vk, bool /*ctrl*/, bool shift) override {
         if (vk == VK_DELETE) { EndSelected(); return true; }
         if (vk == VK_APPS || (vk == VK_F10 && shift)) { ContextMenu(); return true; }
         if (vk == VK_RETURN) {

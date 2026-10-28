@@ -199,7 +199,7 @@ bool ProcessCollector::CollectNt(Snapshot& snap, double interval, uint32_t deman
     return true;
 }
 
-bool ProcessCollector::CollectToolhelp(Snapshot& snap, double interval, uint32_t demandFlags, unsigned cpus) {
+bool ProcessCollector::CollectToolhelp(Snapshot& snap, double interval, uint32_t /*demandFlags*/, unsigned cpus) {
     // Fallback path using only documented APIs.
     Handle snapH(CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0));
     if (!snapH) return false;

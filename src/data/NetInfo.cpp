@@ -6,6 +6,7 @@
 #include <ws2tcpip.h>
 #include <ws2ipdef.h>
 #include <iphlpapi.h>
+#include <objbase.h>
 #include <wlanapi.h>
 
 #include <map>

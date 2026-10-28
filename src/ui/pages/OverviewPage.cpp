@@ -176,9 +176,9 @@ private:
         }
         Rect body{in.x, in.y + 28, in.w, in.h - 28};
         auto& h = app.Hist();
-        auto metric = [&](const std::wstring& big, const std::wstring& small, const RingBuffer<float>* data, float maxV, Color c, float fraction) {
+        auto metric = [&](const std::wstring& big, const std::wstring& detail, const RingBuffer<float>* data, float maxV, Color c, float fraction) {
             g.Text(big, {body.x, body.y, body.w * 0.6f, 36}, Font::Display, c);
-            g.Text(small, {body.x, body.y + 38, body.w, 18}, Font::Small, t.textSecondary);
+            g.Text(detail, {body.x, body.y + 38, body.w, 18}, Font::Small, t.textSecondary);
             if (fraction >= 0) ui.Meter({body.x, body.y + 62, body.w, 5}, fraction, c);
             if (detailed_ && data && data->Size() > 1) GraphView::Spark(g, {body.x, body.y + 74, body.w, body.h - 76}, *data, maxV, c);
         };
@@ -312,7 +312,7 @@ private:
             int any = 0;
             for (auto& [n, v] : s.thermalZonesC) { line(L"Thermal zone " + n, v); ++any; }
             for (size_t i = 0; i < s.gpus.size(); ++i) if (s.gpus[i].temperatureC > 0) { line(L"GPU " + std::to_wstring(i), s.gpus[i].temperatureC); ++any; }
-            for (auto& [idx, hh] : app.Static().health) if (hh.temperatureC > -50) { line(L"Disk " + std::to_wstring(idx), hh.temperatureC); ++any; }
+            for (auto& [diskIdx, hh] : app.Static().health) if (hh.temperatureC > -50) { line(L"Disk " + std::to_wstring(diskIdx), hh.temperatureC); ++any; }
             if (!any) g.Paragraph(L"No temperature sensors are exposed through Windows on this system. CPU die temperatures need a kernel driver, which NEXUS does not install.",
                                   body, Font::Small, t.textSecondary);
             break;

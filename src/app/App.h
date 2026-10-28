@@ -273,16 +273,16 @@ public:
     virtual void Draw(Ui& ui, const Rect& area) = 0;
     virtual bool HasSearch() const { return false; }
     virtual const wchar_t* SearchHint() const { return L"Search"; }
-    virtual void OnSearch(const std::wstring& text) {}
-    virtual bool OnKey(UINT vk, bool ctrl, bool shift) { return false; }
+    virtual void OnSearch(const std::wstring& /*text*/) {}
+    virtual bool OnKey(UINT /*vk*/, bool /*ctrl*/, bool /*shift*/) { return false; }
     // Page header integration (title row of the content panel).
     virtual bool ShowsInsights() const { return false; }      // show the right-hand insights rail
     virtual std::wstring HeaderInfo() const { return L""; }   // small caption under the title
-    virtual void HeaderExtras(Ui& ui, const Rect& area) {}    // controls placed after the title
+    virtual void HeaderExtras(Ui& /*ui*/, const Rect& /*area*/) {}    // controls placed after the title
     // Draws page actions right-to-left, starting at `right` (updated to the left edge used).
-    virtual void HeaderActions(Ui& ui, float& right, float y, float h) {}
-    virtual void PageMenu(std::vector<MenuItem>& items) {}    // extra entries in the "..." menu (ids 500-599)
-    virtual void OnPageMenu(UINT id) {}
+    virtual void HeaderActions(Ui& /*ui*/, float& /*right*/, float /*y*/, float /*h*/) {}
+    virtual void PageMenu(std::vector<MenuItem>& /*items*/) {}    // extra entries in the "..." menu (ids 500-599)
+    virtual void OnPageMenu(UINT /*id*/) {}
     // Text that accessibility tools read for the page's current state.
     virtual std::wstring AccessibleSummary() const { return Title(); }
     virtual void SaveState() {}
