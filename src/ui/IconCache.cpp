@@ -10,7 +10,7 @@ void IconCache::Init(Gfx* g, HWND notify, UINT msg) {
     g_ = g;
     notify_ = notify;
     msg_ = msg;
-    CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_IWICImagingFactory, wic_.PutVoid());
+    CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, __uuidof(IWICImagingFactory), wic_.PutVoid());
 }
 
 void IconCache::Shutdown() {
