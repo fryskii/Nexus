@@ -1,0 +1,47 @@
+name: soak
+# Long stress run on real Windows: NEXUS's UI stress mode while nexus_churn keeps hundreds of
+# short-lived processes running. Start it from the Actions tab (or `gh workflow run soak`).
+on:
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: Stress duration in minutes
+        default: "20"
+      processes:
+        description: Child processes kept alive by the churn generator
+        default: "300"
+
+jobs:
+  soak:
+    runs-on: windows-2022
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build
+        run: |
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DNEXUS_BUILD_TESTS=ON
+          cmake --build build --config Release --parallel --target nexus nexus_churn
+      - name: Soak
+        shell: pwsh
+        run: |
+          $seconds = [int]"${{ inputs.minutes }}" * 60
+          ./scripts/stress.ps1 -Nexus .\build\Release\NEXUS.exe -Churn .\build\Release\nexus_churn.exe `
+            -Seconds $seconds -Alive ${{ inputs.processes }} -ReplacePerSecond 10 -Seed 11 -OutDir $PWD | Tee-Object -FilePath soak.log
+          $summary = Get-ChildItem nexus-stress-*.csv.summary.txt | Select-Object -First 1
+          if (-not $summary) { "::error::no summary written (crash or hang)"; exit 1 }
+          Get-Content $summary | Select-Object -First 14 | ForEach-Object { "::notice::$_" }
+          # Memory and handle trend over time (one line per ~10% of the run) for leak analysis.
+          $rows = Import-Csv ($summary.FullName -replace '\.summary\.txt$', '')
+          $step = [math]::Max(1, [int]($rows.Count / 10))
+          $trend = for ($i = 0; $i -lt $rows.Count; $i += $step) {
+            $r = $rows[$i]
+            "{0,6:N0}s private {1,6:N1} MB  handles {2,5}  gdi {3,4}  user {4,4}  threads {5,3}" -f [double]$r.seconds, ([double]$r.private_bytes / 1MB), $r.handles, $r.gdi_objects, $r.user_objects, $r.threads
+          }
+          "::notice::trend%0A" + ($trend -join '%0A')
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: soak-results
+          path: |
+            nexus-stress-*
+            soak.log
