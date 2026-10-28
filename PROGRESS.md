@@ -47,6 +47,13 @@ Implemented from the reference mockup:
 Verified only under Wine, which has no Segoe Fluent icon font (glyphs show as boxes) and seems to ignore gradient-stop alpha.
 To check on Windows 11: icon glyphs, gradient transparency, snap layouts, maximized frame insets, per-monitor DPI.
 
+## Stress testing
+
+Tooling and Wine results are in docs/STRESS_TESTING.md (fuzzing, `--stress` mode, `nexus_churn`).
+Five bugs were found and fixed (regex freeze/stack overflow, numeric UB, settings whitespace, timer
+starvation, per-frame resource creation). Still to do on Windows 11: `scripts\stress.ps1` for 30+ minutes
+with 300 churned processes; check private bytes, handles and GDI/USER objects (Wine reports 0).
+
 ## Validation plan (next session on Windows 11)
 
 1. Build with MSVC: `scripts\build.ps1`. Fix any compiler differences; MinGW was the only compiler used so far.

@@ -1,5 +1,6 @@
 #pragma once
 // Floating, always-on-top compact monitor showing essential live metrics.
+#include "ui/FramePacer.h"
 #include "ui/Gfx.h"
 #include "ui/Widgets.h"
 
@@ -26,6 +27,7 @@ private:
     App& app_;
     HWND hwnd_ = nullptr;
     Gfx gfx_;
+    FramePacer pacer_{1};
     InputState in_;
     std::unique_ptr<Ui> ui_;
 };

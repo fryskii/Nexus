@@ -4,6 +4,7 @@
 #include "data/ProcessOps.h"
 #include "data/Processes.h"
 #include "data/Worker.h"
+#include "ui/FramePacer.h"
 #include "ui/Graph.h"
 #include "ui/Grid.h"
 
@@ -76,14 +77,14 @@ public:
             const ProcSample* p = s->FindProc(pid_);
             exited_ = !p || p->createTime != createTime_;
         }
-        if (tab_ == Performance || tab_ == General) InvalidateRect(hwnd_, nullptr, FALSE);
+        if (tab_ == Performance || tab_ == General) pacer_.Invalidate(hwnd_);
     }
 
     LRESULT Proc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         switch (m) {
-        case WM_PAINT: Paint(); return 0;
+        case WM_PAINT: pacer_.Paint([this] { Paint(); }); return 0;
         case WM_ERASEBKGND: return 1;
-        case WM_SIZE: gfx_.Resize(LOWORD(lp), HIWORD(lp)); InvalidateRect(h, nullptr, FALSE); return 0;
+        case WM_SIZE: gfx_.Resize(LOWORD(lp), HIWORD(lp)); pacer_.Invalidate(h); return 0;
         case WM_DPICHANGED: {
             gfx_.SetDpi(static_cast<float>(HIWORD(wp)) * static_cast<float>(app_.Config().GetDouble("ui.scale", 1.0)));
             auto* r = reinterpret_cast<RECT*>(lp);
@@ -100,9 +101,14 @@ public:
                 SwitchTab((tab_ + (back ? TabCount - 1 : 1)) % TabCount);
                 return 0;
             }
-            if (tab_ >= Threads && tables_[tab_]->OnKey(static_cast<UINT>(wp), grids_[tab_])) { InvalidateRect(h, nullptr, FALSE); return 0; }
+            if (tab_ >= Threads && tables_[tab_]->OnKey(static_cast<UINT>(wp), grids_[tab_])) { pacer_.Invalidate(h); return 0; }
             break;
-        case WM_TIMER: KillTimer(h, 1); in_.tooltipReady = true; InvalidateRect(h, nullptr, FALSE); return 0;
+        case WM_TIMER:
+            if (pacer_.OnTimer(h, wp)) return 0;
+            KillTimer(h, 1);
+            in_.tooltipReady = true;
+            pacer_.Invalidate(h);
+            return 0;
         case WM_APP + 9: RunDeferred(); return 0;
         case WM_DESTROY:
             g_windows.erase(h);
@@ -148,7 +154,7 @@ private:
     void SwitchTab(int t) {
         tab_ = t;
         if (!loaded_[t]) LoadTab(t);
-        InvalidateRect(hwnd_, nullptr, FALSE);
+        pacer_.Invalidate(hwnd_);
     }
 
     void Reload() {
@@ -171,7 +177,7 @@ private:
                 loading_[t] = false;
                 loaded_[t] = true;
                 grids_[t].MarkDirty();
-                InvalidateRect(hwnd_, nullptr, FALSE);
+                pacer_.Invalidate(hwnd_);
             };
         };
         switch (t) {
@@ -345,12 +351,12 @@ private:
             if (hot != lastHot_ || in_.lDown || in_.tooltipReady) {
                 if (hot != lastHot_) { in_.tooltipReady = false; KillTimer(hwnd_, 1); if (hot) SetTimer(hwnd_, 1, 550, nullptr); }
                 lastHot_ = hot;
-                InvalidateRect(hwnd_, nullptr, FALSE);
+                pacer_.Invalidate(hwnd_);
             }
             now = false;
             break;
         }
-        case WM_MOUSELEAVE: tracking_ = false; in_.mx = in_.my = -1; lastHot_ = 0; InvalidateRect(hwnd_, nullptr, FALSE); now = false; break;
+        case WM_MOUSELEAVE: tracking_ = false; in_.mx = in_.my = -1; lastHot_ = 0; pacer_.Invalidate(hwnd_); now = false; break;
         case WM_LBUTTONDOWN: SetCapture(hwnd_); in_.lDown = in_.lPressed = true; break;
         case WM_LBUTTONDBLCLK: in_.lDown = in_.lPressed = in_.dblClick = true; break;
         case WM_LBUTTONUP: ReleaseCapture(); in_.lDown = false; in_.lReleased = true; break;
@@ -365,7 +371,7 @@ private:
         auto d = std::move(deferred_);
         deferred_.clear();
         for (auto& f : d) f();
-        if (hwnd_) InvalidateRect(hwnd_, nullptr, FALSE);
+        if (hwnd_) pacer_.Invalidate(hwnd_);
     }
 
     void Paint() {
@@ -590,6 +596,7 @@ private:
     std::wstring name_;
     HWND hwnd_ = nullptr;
     Gfx gfx_;
+    FramePacer pacer_{7};
     InputState in_;
     std::unique_ptr<Ui> ui_;
     int tab_ = General;

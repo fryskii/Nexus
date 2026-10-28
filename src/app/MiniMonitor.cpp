@@ -65,9 +65,9 @@ void MiniMonitor::Show(bool show) {
     if (show) Update();
 }
 
-void MiniMonitor::OnThemeChanged() { if (hwnd_) InvalidateRect(hwnd_, nullptr, FALSE); }
+void MiniMonitor::OnThemeChanged() { if (hwnd_) pacer_.Invalidate(hwnd_); }
 
-void MiniMonitor::Update() { if (Visible()) InvalidateRect(hwnd_, nullptr, FALSE); }
+void MiniMonitor::Update() { if (Visible()) pacer_.Invalidate(hwnd_); }
 
 void MiniMonitor::Paint() {
     PAINTSTRUCT ps;
@@ -114,7 +114,8 @@ void MiniMonitor::Paint() {
 
 LRESULT MiniMonitor::Proc(HWND h, UINT m, WPARAM w, LPARAM l) {
     switch (m) {
-    case WM_PAINT: Paint(); return 0;
+    case WM_PAINT: pacer_.Paint([this] { Paint(); }); return 0;
+    case WM_TIMER: if (pacer_.OnTimer(h, w)) return 0; break;
     case WM_ERASEBKGND: return 1;
     case WM_SIZE: gfx_.Resize(LOWORD(l), HIWORD(l)); return 0;
     case WM_DPICHANGED: {

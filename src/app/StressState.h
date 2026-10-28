@@ -28,6 +28,9 @@ struct App::StressState {
     std::map<int, std::vector<float>> paintMsByPage; // PageId -> frame times
     std::map<std::string, uint64_t> actions;
     std::vector<HWND> inspectors;
+    std::vector<float> snapshotMs;          // time spent in App::OnSnapshot
+    std::map<UINT_PTR, uint64_t> timerFires; // WM_TIMER deliveries by id
+    std::map<std::pair<UINT, std::wstring>, uint64_t> messages; // main-loop messages by (id, window class)
     std::string log; // "seconds action detail" per line, for reproducing a run
     bool finished = false;
 };

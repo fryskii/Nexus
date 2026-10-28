@@ -77,8 +77,20 @@ void App::RecordPaintTime(double ms) {
     stress_->paintMsByPage[static_cast<int>(current_)].push_back(static_cast<float>(ms));
 }
 
+void App::RecordSnapshotTime(double ms) {
+    if (stress_ && !stress_->finished) stress_->snapshotMs.push_back(static_cast<float>(ms));
+}
+
+void App::CountStressMessage(const MSG& msg) {
+    if (stress_->finished) return;
+    wchar_t cls[64] = L"(thread)";
+    if (msg.hwnd) GetClassNameW(msg.hwnd, cls, 64);
+    ++stress_->messages[{msg.message, cls}];
+}
+
 bool App::OnStressTimer(UINT_PTR id) {
     if (!stress_ || stress_->finished) return false;
+    ++stress_->timerFires[id];
     if (id == kTimerStressSample) { StressSampleNow(); return true; }
     if (id != kTimerStressTick) return false;
     if (GetTickCount64() - stress_->start >= static_cast<uint64_t>(stress_->seconds) * 1000) { FinishStress(); return true; }
@@ -282,6 +294,24 @@ void App::FinishStress() {
     report("GDI objects", [](const StressSample& s) { return s.gdi; }, 1.0, "");
     report("USER objects", [](const StressSample& s) { return s.user; }, 1.0, "");
     report("threads", [](const StressSample& s) { return s.threads; }, 1.0, "");
+    {
+        std::vector<float> sn = st.snapshotMs;
+        std::sort(sn.begin(), sn.end());
+        if (!sn.empty())
+            add("snapshots handled: %zu  ms p50 %.2f  p95 %.2f  max %.2f\n", sn.size(), static_cast<double>(sn[sn.size() / 2]),
+                static_cast<double>(sn[sn.size() * 95 / 100]), static_cast<double>(sn.back()));
+        sum += "timer deliveries:";
+        for (auto& [id, cnt] : st.timerFires) add(" %u=%llu", static_cast<unsigned>(id), static_cast<unsigned long long>(cnt));
+        sum += "\n";
+    }
+    {
+        std::vector<std::pair<uint64_t, std::pair<UINT, std::wstring>>> top;
+        for (auto& [k, v] : st.messages) top.push_back({v, k});
+        std::sort(top.rbegin(), top.rend());
+        sum += "main-loop messages (count, id, window class):\n";
+        for (size_t k = 0; k < top.size() && k < 12; ++k)
+            add("  %8llu  0x%04x  %ls\n", static_cast<unsigned long long>(top[k].first), top[k].second.first, top[k].second.second.c_str());
+    }
     sum += "paint by page (frames, median ms, max ms):\n";
     for (auto& [page, v] : st.paintMsByPage) {
         std::vector<float> s2 = v;

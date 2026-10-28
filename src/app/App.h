@@ -6,6 +6,7 @@
 #include "data/Hardware.h"
 #include "data/History.h"
 #include "data/Sampler.h"
+#include "ui/FramePacer.h"
 #include "ui/Gfx.h"
 #include "ui/IconCache.h"
 #include "ui/Theme.h"
@@ -176,6 +177,8 @@ private:
     void StressSampleNow();
     void FinishStress();
     void RecordPaintTime(double ms);
+    void RecordSnapshotTime(double ms);
+    void CountStressMessage(const MSG& msg);
     void OnSnapshot();
     void UpdateHistories(const Snapshot& s);
     void UpdateProcHistories(const Snapshot& s);
@@ -246,8 +249,7 @@ private:
     bool narrowHeader_ = false;
     std::wstring searchText_;
     std::unique_ptr<StressState> stress_;
-    double nextPaintMs_ = 0;      // frame pacing (see Invalidate)
-    bool repaintPending_ = false;
+    FramePacer pacer_{4};
     friend class Tray;
 };
 
