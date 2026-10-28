@@ -1,0 +1,5 @@
+LIBRARY dwmapi.dll
+EXPORTS
+DwmExtendFrameIntoClientArea
+DwmGetWindowAttribute
+DwmSetWindowAttribute

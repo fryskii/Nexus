@@ -1,5 +1,8 @@
 #include "core/Win.h"
 
+#include <aclapi.h>
+#include <sddl.h>
+
 #include <shellapi.h>
 #include <shlobj.h>
 #include <shlwapi.h>
@@ -107,6 +110,97 @@ std::wstring DirOf(const std::wstring& path) {
 bool FileExists(const std::wstring& path) {
     DWORD a = GetFileAttributesW(path.c_str());
     return a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+
+namespace {
+bool IsTrustedSid(PSID sid) {
+    if (!sid || !IsValidSid(sid)) return false;
+    if (IsWellKnownSid(sid, WinBuiltinAdministratorsSid) || IsWellKnownSid(sid, WinLocalSystemSid)) return true;
+    // NT SERVICE\TrustedInstaller
+    PSID ti = nullptr;
+    bool trusted = false;
+    if (ConvertStringSidToSidW(L"S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464", &ti)) {
+        trusted = EqualSid(sid, ti) != FALSE;
+        LocalFree(ti);
+    }
+    return trusted;
+}
+
+// Checks owner and DACL of one file-system object; `dangerous` are the rights no untrusted SID may hold.
+bool CheckObject(const std::wstring& path, ACCESS_MASK dangerous, std::wstring* why) {
+    PSID owner = nullptr;
+    PACL dacl = nullptr;
+    PSECURITY_DESCRIPTOR sd = nullptr;
+    if (GetNamedSecurityInfoW(path.c_str(), SE_FILE_OBJECT, OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION, &owner, nullptr, &dacl,
+                              nullptr, &sd) != ERROR_SUCCESS) {
+        if (why) *why = L"Cannot read the permissions of " + path;
+        return false;
+    }
+    bool ok = true;
+    if (!IsTrustedSid(owner)) {
+        ok = false;
+        if (why) *why = path + L" is owned by a non-administrator account";
+    } else if (!dacl) {
+        ok = false; // NULL DACL: everyone has full access
+        if (why) *why = path + L" has no access restrictions";
+    } else {
+        GENERIC_MAPPING map{FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_GENERIC_EXECUTE, FILE_ALL_ACCESS};
+        for (DWORD i = 0; ok && i < dacl->AceCount; ++i) {
+            ACE_HEADER* ace = nullptr;
+            if (!GetAce(dacl, i, reinterpret_cast<void**>(&ace))) { ok = false; break; }
+            if (ace->AceFlags & INHERIT_ONLY_ACE) continue; // applies to children only
+            if (ace->AceType == ACCESS_DENIED_ACE_TYPE || ace->AceType == ACCESS_DENIED_CALLBACK_ACE_TYPE) continue;
+            if (ace->AceType != ACCESS_ALLOWED_ACE_TYPE) { ok = false; break; } // unexpected ACE type: be conservative
+            auto* allowed = reinterpret_cast<ACCESS_ALLOWED_ACE*>(ace);
+            ACCESS_MASK mask = allowed->Mask;
+            MapGenericMask(&mask, &map);
+            if ((mask & dangerous) && !IsTrustedSid(reinterpret_cast<PSID>(&allowed->SidStart))) ok = false;
+        }
+        if (!ok && why && why->empty()) *why = path + L" can be modified by non-administrator accounts";
+    }
+    LocalFree(sd);
+    return ok;
+}
+} // namespace
+
+bool IsProtectedFromNonAdmins(const std::wstring& pathIn, std::wstring* why) {
+    // Resolve junctions and symbolic links so the real location is checked.
+    HANDLE h = CreateFileW(pathIn.c_str(), FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (h == INVALID_HANDLE_VALUE) {
+        if (why) *why = L"Cannot open " + pathIn;
+        return false;
+    }
+    wchar_t buf[MAX_PATH * 4];
+    DWORD n = GetFinalPathNameByHandleW(h, buf, static_cast<DWORD>(std::size(buf)), FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+    CloseHandle(h);
+    if (n == 0 || n >= std::size(buf)) {
+        if (why) *why = L"Cannot resolve " + pathIn;
+        return false;
+    }
+    std::wstring path(buf, n);
+    if (path.rfind(L"\\\\?\\UNC\\", 0) == 0) {
+        if (why) *why = L"NEXUS is on a network share";
+        return false;
+    }
+    if (path.rfind(L"\\\\?\\", 0) == 0) path = path.substr(4);
+    const ACCESS_MASK modify = FILE_WRITE_DATA | FILE_APPEND_DATA | FILE_WRITE_EA | DELETE | WRITE_DAC | WRITE_OWNER | FILE_DELETE_CHILD;
+    const ACCESS_MASK replaceChild = WRITE_DAC | WRITE_OWNER | FILE_DELETE_CHILD | DELETE;
+    if (!CheckObject(path, modify, why)) return false;
+    size_t slash = path.find_last_of(L'\\');
+    if (slash == std::wstring::npos || slash < 2) { if (why) *why = L"Unexpected path " + path; return false; }
+    std::wstring dir = path.substr(0, slash);
+    if (!CheckObject(dir, modify, why)) return false; // no planting or replacing files next to NEXUS
+    // Parents: creating new entries is harmless (C:\ allows it), deleting or renaming existing ones is not.
+    for (;;) {
+        size_t s = dir.find_last_of(L'\\');
+        if (s == std::wstring::npos) break;
+        dir = dir.substr(0, s);
+        std::wstring check = dir.size() == 2 ? dir + L"\\" : dir; // "C:" -> "C:\"
+        if (!CheckObject(check, replaceChild, why)) return false;
+        if (dir.size() <= 2) break;
+    }
+    return true;
 }
 
 bool IsElevated() {

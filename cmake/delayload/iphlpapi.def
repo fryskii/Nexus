@@ -1,0 +1,12 @@
+LIBRARY iphlpapi.dll
+EXPORTS
+FreeMibTable
+GetAdaptersAddresses
+GetExtendedTcpTable
+GetExtendedUdpTable
+GetIfTable2
+Icmp6CreateFile
+Icmp6SendEcho2
+IcmpCloseHandle
+IcmpCreateFile
+IcmpSendEcho

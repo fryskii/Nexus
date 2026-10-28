@@ -128,7 +128,8 @@ private:
         std::wstring name = s->name;
         DWORD e;
         if (s->approvedRoot == HKEY_LOCAL_MACHINE && !app.Elevated())
-            e = RunSelfElevatedAndWait(app.Hwnd(), L"--startup-set \"" + s->approvedKey + L"\" \"" + s->approvedValue + L"\" " + (enable ? L"1" : L"0"));
+            e = RunSelfElevatedAndWait(app.Hwnd(), L"--startup-set " + QuoteArg(s->approvedKey.substr(s->approvedKey.find_last_of(L'\\') + 1)) + L" " +
+                                                       QuoteArg(s->approvedValue) + L" " + (enable ? L"1" : L"0"));
         else
             e = SetStartupItemEnabled(s->approvedRoot, s->approvedKey, s->approvedValue, enable);
         if (e == ERROR_CANCELLED) return;

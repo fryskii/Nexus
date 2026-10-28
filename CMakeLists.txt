@@ -31,6 +31,7 @@ target_compile_definitions(nexus_core PUBLIC NEXUS_VERSION_STR="${PROJECT_VERSIO
 if(WIN32)
   set(NEXUS_SOURCES
     src/main.cpp
+    src/app/LoadConfig.cpp
     src/app/App.cpp
     src/app/Chrome.cpp
     src/app/Commands.cpp
@@ -87,13 +88,40 @@ if(WIN32)
   set_target_properties(nexus PROPERTIES OUTPUT_NAME "NEXUS")
   target_include_directories(nexus PRIVATE src)
   target_compile_definitions(nexus PRIVATE ${NEXUS_DEFS})
+  # DLLs that are not on Windows' KnownDLLs list are delay-loaded: they are loaded on first use with
+  # LoadLibrary, which only searches System32 (SetDefaultDllDirectories in wWinMain). Linked
+  # normally, Windows would look for them next to NEXUS.exe first, so a planted DLL (for example
+  # version.dll in Downloads) would run inside NEXUS. The functions used from each are listed in
+  # cmake/delayload/<dll>.def; a new function from these DLLs is a link error until it is added there.
+  set(NEXUS_DELAYLOAD crypt32 dwrite iphlpapi powrprof uxtheme version wintrust wtsapi32 d2d1 dbghelp dwmapi dxgi pdh wevtapi)
   target_link_libraries(nexus PRIVATE nexus_core
-    d2d1 dwrite windowscodecs dwmapi uxtheme comctl32 shlwapi shell32 ole32 oleaut32 uuid
-    pdh iphlpapi ws2_32 wtsapi32 wintrust crypt32 dbghelp psapi version advapi32
-    wevtapi setupapi dxgi powrprof userenv comdlg32 ntdll)
+    comctl32 shlwapi shell32 ole32 oleaut32 uuid ws2_32 psapi advapi32 setupapi comdlg32 ntdll)
+  if(MSVC)
+    target_link_libraries(nexus PRIVATE ${NEXUS_DELAYLOAD} delayimp)
+    foreach(dll ${NEXUS_DELAYLOAD})
+      target_link_options(nexus PRIVATE /DELAYLOAD:${dll}.dll)
+    endforeach()
+  else()
+    find_program(NEXUS_DLLTOOL NAMES x86_64-w64-mingw32-dlltool dlltool REQUIRED)
+    set(delay_libs)
+    foreach(dll ${NEXUS_DELAYLOAD})
+      set(out "${CMAKE_CURRENT_BINARY_DIR}/delayload/lib${dll}_delay.a")
+      add_custom_command(OUTPUT "${out}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/delayload"
+        COMMAND "${NEXUS_DLLTOOL}" --input-def "${CMAKE_CURRENT_SOURCE_DIR}/cmake/delayload/${dll}.def"
+                --output-delaylib "${out}" --dllname ${dll}.dll
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/cmake/delayload/${dll}.def" VERBATIM)
+      list(APPEND delay_libs "${out}")
+    endforeach()
+    add_custom_target(nexus_delayload DEPENDS ${delay_libs})
+    add_dependencies(nexus nexus_delayload)
+    target_link_libraries(nexus PRIVATE ${delay_libs})
+  endif()
 
   if(MSVC)
     target_compile_options(nexus PRIVATE /W4 /permissive- /utf-8 /EHsc /Zc:__cplusplus)
+    # Resolve static imports from System32 only (no DLL planting next to NEXUS.exe); see LoadConfig.cpp.
+    target_link_options(nexus PRIVATE /DEPENDENTLOADFLAG:0x800)
     target_link_options(nexus PRIVATE /MANIFEST:NO)
     set_property(TARGET nexus nexus_core PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     target_compile_definitions(nexus PRIVATE _CRT_SECURE_NO_WARNINGS)
@@ -101,6 +129,13 @@ if(WIN32)
     target_compile_options(nexus PRIVATE -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers
       -Wno-cast-function-type -municode)
     target_link_options(nexus PRIVATE -municode -static -static-libgcc -static-libstdc++ $<$<BOOL:${NEXUS_STRIP}>:-s>)
+    # GNU ld < 2.42 does not set the PE load-config directory, so point it at _load_config_used
+    # (DependentLoadFlags = System32 only; see src/app/LoadConfig.cpp). Required: without it,
+    # DLLs planted next to NEXUS.exe would be loaded.
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    add_custom_command(TARGET nexus POST_BUILD
+      COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/cmake/pe_load_config.py" "$<TARGET_FILE:nexus>"
+      VERBATIM)
   endif()
 endif()
 
@@ -108,6 +143,9 @@ if(NEXUS_BUILD_TESTS)
   enable_testing()
   add_executable(nexus_tests tests/tests.cpp)
   target_link_libraries(nexus_tests PRIVATE nexus_core)
+  if(WIN32)
+    target_link_libraries(nexus_tests PRIVATE shell32)
+  endif()
   if(WIN32 AND NOT MSVC)
     target_link_options(nexus_tests PRIVATE -static)
   endif()

@@ -77,6 +77,11 @@ std::wstring FileNameOf(const std::wstring& path);
 std::wstring DirOf(const std::wstring& path);
 bool FileExists(const std::wstring& path);
 bool IsElevated();
+// True if only Administrators, SYSTEM and TrustedInstaller can replace or modify the file at
+// `path`: the file and its folder grant no write/delete/permission rights to anyone else, and no
+// parent folder lets anyone else delete, rename or re-permission its children. Reparse points are
+// resolved first. Used before NEXUS registers itself to run in place of Task Manager.
+bool IsProtectedFromNonAdmins(const std::wstring& path, std::wstring* why = nullptr);
 uint32_t WindowsBuild();     // e.g. 22631
 bool IsRunningUnderWine();   // Wine implements many APIs as stubs that report success
 bool IsWindowsDarkMode();      // apps theme

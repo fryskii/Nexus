@@ -1,0 +1,9 @@
+LIBRARY wintrust.dll
+EXPORTS
+CryptCATAdminEnumCatalogFromHash
+CryptCATAdminReleaseCatalogContext
+CryptCATAdminReleaseContext
+CryptCATCatalogInfoFromContext
+WTHelperGetProvSignerFromChain
+WTHelperProvDataFromStateData
+WinVerifyTrust

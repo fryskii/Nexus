@@ -1,0 +1,8 @@
+LIBRARY wtsapi32.dll
+EXPORTS
+WTSDisconnectSession
+WTSEnumerateSessionsW
+WTSFreeMemory
+WTSLogoffSession
+WTSQuerySessionInformationW
+WTSSendMessageW

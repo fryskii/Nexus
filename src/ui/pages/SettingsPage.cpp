@@ -336,12 +336,24 @@ private:
                                L"If NEXUS is moved or deleted while this is on, Task Manager will not open until the setting is removed.",
                                L"Replace Task Manager"))
             return;
-        wchar_t exe[MAX_PATH];
-        GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        std::wstring args = std::wstring(L"--taskmgr-replace ") + (on ? L"1" : L"0") + L" \"" + exe + L"\"";
-        DWORD e = RunSelfElevatedAndWait(app.Hwnd(), args);
+        if (on) {
+            // Windows may start the Task Manager replacement elevated without asking, so NEXUS must be
+            // somewhere only administrators can change; otherwise any program could swap NEXUS.exe
+            // (or plant files next to it) and gain administrator rights.
+            wchar_t exe[MAX_PATH];
+            GetModuleFileNameW(nullptr, exe, MAX_PATH);
+            std::wstring why;
+            if (!IsProtectedFromNonAdmins(exe, &why)) {
+                app.Info(L"Install NEXUS first",
+                         L"NEXUS can only replace Task Manager when it is installed in a folder that only administrators can change, "
+                         L"such as Program Files (the installer does this). This copy is not:\n\n" + why, true);
+                return;
+            }
+        }
+        DWORD e = RunSelfElevatedAndWait(app.Hwnd(), std::wstring(L"--taskmgr-replace ") + (on ? L"1" : L"0"));
         if (e == ERROR_CANCELLED) return;
-        if (e) app.ShowStatus(L"Could not change the Task Manager replacement: " + LastErrorMessage(e), true);
+        if (e == ERROR_INVALID_OWNER) app.ShowStatus(L"Not changed: NEXUS must be installed in a folder only administrators can change", true);
+        else if (e) app.ShowStatus(L"Could not change the Task Manager replacement: " + LastErrorMessage(e), true);
         else app.ShowStatus(on ? L"NEXUS now opens instead of Task Manager" : L"Task Manager restored");
     }
 

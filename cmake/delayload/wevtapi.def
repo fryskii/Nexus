@@ -1,0 +1,9 @@
+LIBRARY wevtapi.dll
+EXPORTS
+EvtClose
+EvtCreateRenderContext
+EvtFormatMessage
+EvtNext
+EvtOpenPublisherMetadata
+EvtQuery
+EvtRender

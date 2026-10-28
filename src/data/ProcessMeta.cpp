@@ -130,7 +130,9 @@ std::shared_ptr<ProcMeta> AcquireProcMeta(uint32_t pid, const std::wstring& name
     if (!h) {
         m->accessDenied = true;
         // Minimal processes (Registry, Memory Compression, Secure System) have no image file.
-        if (name == L"Registry" || name == L"Memory Compression" || name == L"Secure System" || name == L"vmmem") {
+        // Minimal processes created by the kernel; they live in session 0, where programs started by a
+        // user cannot create processes, so a look-alike name in a user session is not labelled SYSTEM.
+        if (session == 0 && (name == L"Registry" || name == L"Memory Compression" || name == L"Secure System" || name == L"vmmem")) {
             m->user = L"NT AUTHORITY\\SYSTEM";
             m->userShort = L"SYSTEM";
             m->inWindowsDir = true;

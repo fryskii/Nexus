@@ -34,5 +34,8 @@ std::wstring Trim(const std::wstring& s);
 
 // Parses sizes such as "100MB", "1.5 GB", "512k" -> bytes. Returns false on malformed input.
 bool ParseSize(const std::wstring& text, uint64_t& out);
+// Quotes one command-line argument so CommandLineToArgvW / the CRT parse it back unchanged
+// (embedded quotes and trailing backslashes included). Used for elevated helper arguments.
+std::wstring QuoteArg(const std::wstring& arg);
 
 } // namespace nx

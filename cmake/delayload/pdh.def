@@ -1,0 +1,8 @@
+LIBRARY pdh.dll
+EXPORTS
+PdhAddEnglishCounterW
+PdhCloseQuery
+PdhCollectQueryData
+PdhGetFormattedCounterArrayW
+PdhGetFormattedCounterValue
+PdhOpenQueryW

@@ -8,6 +8,10 @@
 #include "core/Settings.h"
 #include "core/Smbios.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#include <shellapi.h>
+#endif
 #include <chrono>
 #include <cstdio>
 #include <cstring>
@@ -120,6 +124,25 @@ static void TestRingBuffer() {
     CHECK(tail.size() == 2 && tail[0] == 5);
 }
 
+
+static void TestQuoteArg() {
+    CHECK_EQ_W(QuoteArg(L"plain"), L"plain");
+    CHECK_EQ_W(QuoteArg(L""), L"\"\"");
+    CHECK_EQ_W(QuoteArg(L"a b"), L"\"a b\"");
+    CHECK_EQ_W(QuoteArg(L"say \"hi\""), L"\"say \\\"hi\\\"\"");
+    CHECK_EQ_W(QuoteArg(L"C:\\dir with space\\"), L"\"C:\\dir with space\\\\\"");
+#ifdef _WIN32
+    // Round trip through the real parser, including injection attempts.
+    const wchar_t* hostile[] = {L"x\" --svc stop \"WinDefend", L"a\\\"b", L"trailing\\", L"\\\\server\\share\\", L"\"\"", L"tab\there", L"\u00e9\u65e5 \"q\" \\\\"};
+    for (const wchar_t* h : hostile) {
+        std::wstring cmd = L"nexus.exe --startup-set " + QuoteArg(h) + L" 1";
+        int argc = 0;
+        LPWSTR* argv = CommandLineToArgvW(cmd.c_str(), &argc);
+        CHECK(argv && argc == 4 && std::wstring(argv[2]) == h && std::wstring(argv[3]) == L"1");
+        LocalFree(argv);
+    }
+#endif
+}
 
 static void TestRegex() {
     auto re = [](const wchar_t* p, const std::wstring& t) {
@@ -368,6 +391,7 @@ int main() {
     TestRingBuffer();
     TestFilter();
     TestRegex();
+    TestQuoteArg();
     TestSmbios();
     TestDiagnostics();
     std::printf("%d passed, %d failed\n", g_passed, g_failed);

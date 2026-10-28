@@ -136,7 +136,11 @@ private:
         std::wstring name = s->name, display = s->displayName;
         static const wchar_t* verbs[] = {L"start", L"stop", L"restart", L"pause", L"continue"};
         const wchar_t* verb = verbs[static_cast<int>(a)];
-        if (a == ServiceAction::Stop || a == ServiceAction::Restart) {
+        // Without elevation, disruptive actions go straight to the elevated helper, which asks for
+        // confirmation in its own window (so the user is asked once, by the process that acts).
+        bool disruptive = a == ServiceAction::Stop || a == ServiceAction::Restart || a == ServiceAction::Pause;
+        bool viaHelper = disruptive && !app.Elevated();
+        if (!viaHelper && (a == ServiceAction::Stop || a == ServiceAction::Restart)) {
             if (!app.Confirm(std::wstring(a == ServiceAction::Stop ? L"Stop " : L"Restart ") + display + L"?",
                              L"Programs or Windows features that depend on this service may stop working until it is started again.",
                              a == ServiceAction::Stop ? L"Stop service" : L"Restart service", true))
@@ -147,11 +151,12 @@ private:
         auto result = std::make_shared<std::pair<DWORD, std::wstring>>();
         HWND hwnd = app.Hwnd();
         bool elevated = app.Elevated();
-        worker::Run([result, name, a] { result->first = ControlServiceAction(name, a, result->second); }, [this, result, name, display, verb, hwnd, elevated] {
+        worker::Run([result, name, a, viaHelper] { result->first = viaHelper ? ERROR_ACCESS_DENIED : ControlServiceAction(name, a, result->second); },
+                    [this, result, name, display, verb, hwnd, elevated] {
             if (result->first == ERROR_ACCESS_DENIED && !elevated) {
                 // Use a one-off elevated helper instead of elevating the whole UI.
                 auto r2 = std::make_shared<DWORD>(0);
-                std::wstring args = std::wstring(L"--svc ") + verb + L" \"" + name + L"\"";
+                std::wstring args = std::wstring(L"--svc ") + verb + L" " + QuoteArg(name);
                 worker::Run([r2, hwnd, args] { *r2 = RunSelfElevatedAndWait(hwnd, args); }, [this, r2, display, verb] {
                     busy_ = false;
                     if (*r2 == 0) app.ShowStatus(L"Service " + display + L": " + verb + L" completed");
@@ -172,9 +177,12 @@ private:
         const ServiceInfo* s = Selected();
         if (!s) return;
         std::wstring name = s->name;
+        if (type == SERVICE_DISABLED && app.Elevated() &&
+            !app.Confirm(L"Disable " + s->displayName + L"?", L"It will no longer start, even when Windows or other programs need it.", L"Disable service", true))
+            return;
         DWORD e = SetServiceStartType(name, type, delayed);
         if (e == ERROR_ACCESS_DENIED && !app.Elevated())
-            e = RunSelfElevatedAndWait(app.Hwnd(), L"--svc-starttype \"" + name + L"\" " + std::to_wstring(type) + (delayed ? L" 1" : L" 0"));
+            e = RunSelfElevatedAndWait(app.Hwnd(), L"--svc-starttype " + QuoteArg(name) + L" " + std::to_wstring(type) + (delayed ? L" 1" : L" 0"));
         if (e && e != ERROR_CANCELLED) app.ShowStatus(L"Could not change the startup type: " + LastErrorMessage(e), true);
         else if (!e) app.ShowStatus(L"Startup type changed for " + s->displayName);
         configs_.clear();

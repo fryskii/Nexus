@@ -12,6 +12,7 @@
 #include <sddl.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <map>
 #include <mutex>
 #include <unordered_map>
@@ -412,7 +413,8 @@ std::vector<HandleInfo> QueryHandles(uint32_t pid, std::wstring& error) {
     if (!nt::NT_OK(st)) { error = L"Handle information is not available for this process."; return out; }
     auto types = ObjectTypeNames();
     auto* info = reinterpret_cast<PROCESS_HANDLE_SNAPSHOT_INFORMATION_NX*>(buf.data());
-    size_t n = std::min<size_t>(info->NumberOfHandles, 50000);
+    size_t fits = (buf.size() - offsetof(PROCESS_HANDLE_SNAPSHOT_INFORMATION_NX, Handles)) / sizeof(PROCESS_HANDLE_TABLE_ENTRY_INFO_NX);
+    size_t n = std::min<size_t>({info->NumberOfHandles, fits, 50000});
     std::vector<uint8_t> nameBuf(8192);
     for (size_t i = 0; i < n; ++i) {
         auto& e = info->Handles[i];
@@ -574,9 +576,12 @@ bool ReadParams(HANDLE h, uint64_t& envAddr, uint64_t& envSize, std::wstring* cw
     if (cwd) {
         nt::UNICODE_STRING us;
         memcpy(&us, pp + 0x38, sizeof us);
-        if (us.Buffer && us.Length && us.Length < 65534) {
-            std::wstring s(us.Length / sizeof(wchar_t), L'\0');
-            if (ReadProcessMemory(h, us.Buffer, s.data(), us.Length, &rd)) *cwd = s;
+        // Length comes from the (possibly hostile) target: read whole characters only, so an odd
+        // length cannot write past the buffer.
+        size_t chars = us.Length / sizeof(wchar_t);
+        if (us.Buffer && chars && us.Length < 65534) {
+            std::wstring s(chars, L'\0');
+            if (ReadProcessMemory(h, us.Buffer, s.data(), chars * sizeof(wchar_t), &rd)) *cwd = s.substr(0, rd / sizeof(wchar_t));
         }
     }
     return true;

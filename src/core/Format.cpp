@@ -243,4 +243,20 @@ bool ParseSize(const std::wstring& text, uint64_t& out) {
     return true;
 }
 
+std::wstring QuoteArg(const std::wstring& arg) {
+    if (!arg.empty() && arg.find_first_of(L" \t\n\v\"") == std::wstring::npos) return arg;
+    std::wstring out = L"\"";
+    size_t backslashes = 0;
+    for (wchar_t c : arg) {
+        if (c == L'\\') { ++backslashes; continue; }
+        if (c == L'"') out.append(backslashes * 2 + 1, L'\\');
+        else out.append(backslashes, L'\\');
+        backslashes = 0;
+        out.push_back(c);
+    }
+    out.append(backslashes * 2, L'\\'); // so the closing quote is not escaped
+    out.push_back(L'"');
+    return out;
+}
+
 } // namespace nx
