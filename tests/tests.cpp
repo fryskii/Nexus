@@ -125,6 +125,20 @@ static void TestRingBuffer() {
 }
 
 
+static void TestGreeting() {
+    CHECK_EQ_W(GreetingText(9, 3, L"Brayden"), L"Good morning, Brayden");
+    CHECK_EQ_W(GreetingText(5, 3, L"Brayden"), L"Good morning, Brayden");
+    CHECK_EQ_W(GreetingText(12, 3, L"Brayden"), L"Good afternoon, Brayden");
+    CHECK_EQ_W(GreetingText(16, 3, L"Brayden"), L"Good afternoon, Brayden");
+    CHECK_EQ_W(GreetingText(17, 3, L"Brayden"), L"Happy Wednesday, Brayden");
+    CHECK_EQ_W(GreetingText(2, 0, L"Brayden"), L"Happy Sunday, Brayden");
+    CHECK_EQ_W(GreetingText(20, 6, L"  "), L"Happy Saturday");
+    CHECK_EQ_W(FirstName(L"Brayden Smith"), L"Brayden");
+    CHECK_EQ_W(FirstName(L"Smith, Brayden"), L"Brayden");
+    CHECK_EQ_W(FirstName(L"  Brayden  "), L"Brayden");
+    CHECK_EQ_W(FirstName(L""), L"");
+}
+
 static void TestQuoteArg() {
     CHECK_EQ_W(QuoteArg(L"plain"), L"plain");
     CHECK_EQ_W(QuoteArg(L""), L"\"\"");
@@ -392,6 +406,7 @@ int main() {
     TestFilter();
     TestRegex();
     TestQuoteArg();
+    TestGreeting();
     TestSmbios();
     TestDiagnostics();
     std::printf("%d passed, %d failed\n", g_passed, g_failed);

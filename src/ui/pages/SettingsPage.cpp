@@ -17,6 +17,7 @@ public:
     const wchar_t* Title() const override { return L"Settings"; }
     wchar_t Glyph() const override { return 0xE713; }
     std::wstring AccessibleSummary() const override { return L"Settings"; }
+    void OnHide() override { nameEdit_.Hide(); }
 
     void Draw(Ui& ui, const Rect& area) override {
         Gfx& g = ui.g;
@@ -46,6 +47,23 @@ public:
                 cfg.SetString("ui.font", nf == 0 ? L"inter" : L"segoe");
                 Gfx::SetUiFont(nf == 0 ? L"inter" : L"segoe");
                 app.ApplyTheme();
+            }
+        }
+        {
+            Rect c = Row(ui, x, w, L"Greeting",
+                         L"Shows \u201CGood morning\u201D, \u201CGood afternoon\u201D or \u201CHappy <day>\u201D (in the evening) with your name in the "
+                         L"title bar. Leave the name empty to use your Windows account name.");
+            bool on = cfg.GetBool("ui.greeting", true);
+            if (ui.Toggle(Id("set.greeting"), {c.R() - 60, c.y, 60, c.h}, on)) { cfg.SetBool("ui.greeting", on); app.Invalidate(); }
+            // Native edit: only while the whole row is visible in the scrolled view.
+            Rect er{c.R() - 290, c.y + (c.h - 32) / 2, 220, 32};
+            if (on && er.y >= view.y && er.B() <= view.B()) {
+                nameEdit_.Place(app, er, L"Your name"); // creates the edit on first use, so fill it afterwards
+                if (!nameEditPlaced_) { nameEdit_.SetText(cfg.GetString("ui.greeting.name")); nameEditPlaced_ = true; }
+                std::wstring typed = nameEdit_.Text();
+                if (typed != cfg.GetString("ui.greeting.name")) { cfg.SetString("ui.greeting.name", typed); app.Invalidate(); }
+            } else {
+                nameEdit_.Hide();
             }
         }
         {
@@ -358,6 +376,8 @@ private:
     }
 
     float scroll_ = 0, y_ = 0;
+    NativeEdit nameEdit_;
+    bool nameEditPlaced_ = false;
 };
 
 } // namespace

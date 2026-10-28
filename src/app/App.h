@@ -166,6 +166,9 @@ public:
     void SetSelfEfficiency(bool on);
     bool SelfEfficiency() const { return settings_.GetBool("app.efficiency", false); }
     void ToggleInsights();
+    // Name used in the title-bar greeting: the "ui.greeting.name" setting, else the first name of
+    // the Windows account (looked up once in the background), else empty.
+    std::wstring GreetingName() const;
     // Stress mode (Stress.cpp): randomized UI actions plus resource sampling; settings are not saved.
     void EnableStress(int seconds, const std::wstring& csvPath, unsigned seed);
     bool Stressing() const { return stress_ != nullptr; }
@@ -248,6 +251,7 @@ private:
     bool ncTracking_ = false;
     bool narrowHeader_ = false;
     std::wstring searchText_;
+    std::wstring accountFirstName_;
     std::unique_ptr<StressState> stress_;
     FramePacer pacer_{4};
     friend class Tray;

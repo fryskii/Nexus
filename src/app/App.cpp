@@ -10,6 +10,8 @@
 
 #include <commctrl.h>
 #include <dwmapi.h>
+#define SECURITY_WIN32 // for secext.h
+#include <secext.h>
 #include <shellapi.h>
 #include <shlobj.h>
 #include <uxtheme.h>
@@ -206,6 +208,17 @@ bool App::Create(int nCmdShow, bool startMinimized) {
     RestoreWindowPlacement(nCmdShow);
 
     worker::Init(hwnd_, WM_NX_WORKER, 2);
+    // Account display name for the greeting; can involve a directory lookup, so off the UI thread.
+    auto name = std::make_shared<std::wstring>();
+    worker::Run([name] {
+        wchar_t buf[256];
+        ULONG n = 256;
+        if (GetUserNameExW(NameDisplay, buf, &n) && n) *name = FirstName(std::wstring(buf, n));
+        if (name->empty()) {
+            DWORD m = 256;
+            if (GetUserNameW(buf, &m) && m > 1) *name = std::wstring(buf, m - 1);
+        }
+    }, [this, name] { accountFirstName_ = *name; Invalidate(); });
     ApplyMica();
     Gfx::SetUiFont(settings_.GetString("ui.font", L"inter"));
     if (!gfx_.Init(hwnd_)) {

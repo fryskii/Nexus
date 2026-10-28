@@ -93,7 +93,7 @@ if(WIN32)
   # normally, Windows would look for them next to NEXUS.exe first, so a planted DLL (for example
   # version.dll in Downloads) would run inside NEXUS. The functions used from each are listed in
   # cmake/delayload/<dll>.def; a new function from these DLLs is a link error until it is added there.
-  set(NEXUS_DELAYLOAD crypt32 dwrite iphlpapi powrprof uxtheme version wintrust wtsapi32 d2d1 dbghelp dwmapi dxgi pdh wevtapi)
+  set(NEXUS_DELAYLOAD crypt32 dwrite iphlpapi powrprof uxtheme version wintrust wtsapi32 d2d1 dbghelp dwmapi dxgi pdh wevtapi secur32)
   target_link_libraries(nexus PRIVATE nexus_core
     comctl32 shlwapi shell32 ole32 oleaut32 uuid ws2_32 psapi advapi32 setupapi comdlg32 ntdll)
   if(MSVC)

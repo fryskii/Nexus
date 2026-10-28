@@ -259,4 +259,20 @@ std::wstring QuoteArg(const std::wstring& arg) {
     return out;
 }
 
+std::wstring GreetingText(int hour, int weekday, const std::wstring& name) {
+    static const wchar_t* const days[] = {L"Sunday", L"Monday", L"Tuesday", L"Wednesday", L"Thursday", L"Friday", L"Saturday"};
+    std::wstring g = hour >= 5 && hour < 12 ? L"Good morning" : hour >= 12 && hour < 17 ? L"Good afternoon"
+                                                                                     : std::wstring(L"Happy ") + days[((weekday % 7) + 7) % 7];
+    std::wstring n = Trim(name);
+    return n.empty() ? g : g + L", " + n;
+}
+
+std::wstring FirstName(const std::wstring& displayName) {
+    std::wstring s = Trim(displayName);
+    size_t comma = s.find(L',');
+    if (comma != std::wstring::npos) s = Trim(s.substr(comma + 1)); // "Last, First"
+    size_t sp = s.find_first_of(L" \t");
+    return sp == std::wstring::npos ? s : s.substr(0, sp);
+}
+
 } // namespace nx

@@ -62,6 +62,16 @@ void App::Paint() {
     gfx_.Line(sr.x + 22.5f, sr.y + 19.5f, sr.x + 26.5f, sr.y + 23.5f, theme_.textSecondary, 1.4f);
     LayoutSearch({sr.x + 38, sr.y + 8, sr.w - 48, sr.h - 15}, true);
 
+    // Greeting between the search box and the caption buttons, shown only when it fits.
+    if (settings_.GetBool("ui.greeting", true)) {
+        SYSTEMTIME st;
+        GetLocalTime(&st);
+        std::wstring greeting = GreetingText(st.wHour, st.wDayOfWeek, GreetingName());
+        float tw = gfx_.Measure(greeting, Font::BodySemi);
+        float right = capMin_.x - 18, left = sr.R() + 24;
+        if (right - left >= tw) gfx_.Text(greeting, {right - tw, sr.y, tw + 2, sr.h}, Font::BodySemi, theme_.textSecondary, Align::Right);
+    }
+
     DrawNav(ui, nav);
 
     // Content panel.
@@ -87,6 +97,11 @@ void App::Paint() {
     // Actions that open menus/dialogs run outside WM_PAINT.
     if (!deferred_.empty()) PostMessageW(hwnd_, WM_NX_DEFERRED, 0, 0);
     lastHot_ = ui.HitTest(input_.mx, input_.my);
+}
+
+std::wstring App::GreetingName() const {
+    std::wstring custom = Trim(settings_.GetString("ui.greeting.name"));
+    return custom.empty() ? accountFirstName_ : custom.substr(0, 40);
 }
 
 void App::DrawBackground(float W, float H) {

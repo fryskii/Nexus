@@ -37,5 +37,10 @@ bool ParseSize(const std::wstring& text, uint64_t& out);
 // Quotes one command-line argument so CommandLineToArgvW / the CRT parse it back unchanged
 // (embedded quotes and trailing backslashes included). Used for elevated helper arguments.
 std::wstring QuoteArg(const std::wstring& arg);
+// Title-bar greeting: "Good morning" (5:00-11:59), "Good afternoon" (12:00-16:59), otherwise
+// "Happy <weekday>"; followed by ", <name>" when a name is given. weekday: 0 = Sunday.
+std::wstring GreetingText(int hour, int weekday, const std::wstring& name);
+// First word of a display name ("Brayden Smith" -> "Brayden"); "Smith, Brayden" -> "Brayden".
+std::wstring FirstName(const std::wstring& displayName);
 
 } // namespace nx

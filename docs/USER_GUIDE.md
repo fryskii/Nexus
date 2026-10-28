@@ -22,6 +22,8 @@ Ctrl+B collapses the sidebar.
   - *Efficiency mode*: runs NEXUS itself with EcoQoS and at least a 2-second update interval.
   - *Dark mode*, *Always on top*, *Show details* (turns compact mode off).
   Hide the panel from the "•••" menu. Values the system does not report show "—" rather than an estimate.
+- **Greeting**: the title bar says "Good morning" (5 am–noon), "Good afternoon" (noon–5 pm) or "Happy <day>" in the evening,
+  followed by your first name from your Windows account. Change the name or turn it off in Settings → Appearance → Greeting.
 - **Font**: NEXUS uses Inter, which is built into `NEXUS.exe` and loaded privately (nothing is installed on the system).
   Switch to Segoe UI in Settings → Appearance → Font.
 - Status messages appear briefly as a pill at the bottom of the page. There is no separate status bar.
