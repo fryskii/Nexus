@@ -1,0 +1,12 @@
+{
+  "version": "0.9.0",
+  "processes": 217,
+  "cpuStaticMs": 0.719,
+  "enumerateFirstMs": 28.506,
+  "enumerateAvgMs": 7.950,
+  "enumerateMaxMs": 11.660,
+  "iterations": 100,
+  "workingSetBytes": 11575296,
+  "privateBytes": 3010560,
+  "handles": 356
+}

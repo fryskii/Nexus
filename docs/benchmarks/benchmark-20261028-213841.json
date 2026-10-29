@@ -1,0 +1,185 @@
+{
+    "Machine":  {
+                    "OS":  "Microsoft Windows 11 Home 10.0.26200",
+                    "CPU":  "Intel(R) Core(TM) i5-14400F",
+                    "LogicalProcessors":  16,
+                    "MemoryGB":  15.8,
+                    "Elevated":  true,
+                    "Date":  "2026-10-28T21:38:41",
+                    "Seconds":  120,
+                    "Warmup":  15,
+                    "Runs":  3
+                },
+    "Runs":  [
+                 {
+                     "App":  "NEXUS",
+                     "Mode":  "visible",
+                     "StartupMs":  295,
+                     "CpuAvgPct":  0.207,
+                     "CpuMaxPct":  0.481,
+                     "WorkingSetAvgMB":  68.2,
+                     "WorkingSetMaxMB":  68.4,
+                     "PrivateEndMB":  79.3,
+                     "PrivateStartMB":  79.2
+                 },
+                 {
+                     "App":  "Task Manager",
+                     "Mode":  "visible",
+                     "StartupMs":  347,
+                     "CpuAvgPct":  0.506,
+                     "CpuMaxPct":  0.961,
+                     "WorkingSetAvgMB":  161,
+                     "WorkingSetMaxMB":  162.7,
+                     "PrivateEndMB":  115.8,
+                     "PrivateStartMB":  117.4
+                 },
+                 {
+                     "App":  "NEXUS",
+                     "Mode":  "minimized",
+                     "StartupMs":  327,
+                     "CpuAvgPct":  0.034,
+                     "CpuMaxPct":  0.193,
+                     "WorkingSetAvgMB":  66.2,
+                     "WorkingSetMaxMB":  66.7,
+                     "PrivateEndMB":  75,
+                     "PrivateStartMB":  75.3
+                 },
+                 {
+                     "App":  "Task Manager",
+                     "Mode":  "minimized",
+                     "StartupMs":  314,
+                     "CpuAvgPct":  0.444,
+                     "CpuMaxPct":  0.867,
+                     "WorkingSetAvgMB":  160.3,
+                     "WorkingSetMaxMB":  161.7,
+                     "PrivateEndMB":  115.4,
+                     "PrivateStartMB":  117.4
+                 },
+                 {
+                     "App":  "NEXUS",
+                     "Mode":  "visible",
+                     "StartupMs":  306,
+                     "CpuAvgPct":  0.207,
+                     "CpuMaxPct":  0.481,
+                     "WorkingSetAvgMB":  67.3,
+                     "WorkingSetMaxMB":  67.5,
+                     "PrivateEndMB":  77.8,
+                     "PrivateStartMB":  77.8
+                 },
+                 {
+                     "App":  "Task Manager",
+                     "Mode":  "visible",
+                     "StartupMs":  316,
+                     "CpuAvgPct":  0.532,
+                     "CpuMaxPct":  1.06,
+                     "WorkingSetAvgMB":  161.6,
+                     "WorkingSetMaxMB":  163.3,
+                     "PrivateEndMB":  115.7,
+                     "PrivateStartMB":  117.6
+                 },
+                 {
+                     "App":  "NEXUS",
+                     "Mode":  "minimized",
+                     "StartupMs":  300,
+                     "CpuAvgPct":  0.053,
+                     "CpuMaxPct":  0.577,
+                     "WorkingSetAvgMB":  66.3,
+                     "WorkingSetMaxMB":  66.5,
+                     "PrivateEndMB":  75.4,
+                     "PrivateStartMB":  75.6
+                 },
+                 {
+                     "App":  "Task Manager",
+                     "Mode":  "minimized",
+                     "StartupMs":  318,
+                     "CpuAvgPct":  0.46,
+                     "CpuMaxPct":  0.961,
+                     "WorkingSetAvgMB":  159.7,
+                     "WorkingSetMaxMB":  161.2,
+                     "PrivateEndMB":  115,
+                     "PrivateStartMB":  118
+                 },
+                 {
+                     "App":  "NEXUS",
+                     "Mode":  "visible",
+                     "StartupMs":  289,
+                     "CpuAvgPct":  0.19,
+                     "CpuMaxPct":  0.576,
+                     "WorkingSetAvgMB":  67.3,
+                     "WorkingSetMaxMB":  67.5,
+                     "PrivateEndMB":  77.6,
+                     "PrivateStartMB":  77.5
+                 },
+                 {
+                     "App":  "Task Manager",
+                     "Mode":  "visible",
+                     "StartupMs":  332,
+                     "CpuAvgPct":  0.473,
+                     "CpuMaxPct":  1.057,
+                     "WorkingSetAvgMB":  160.8,
+                     "WorkingSetMaxMB":  162.5,
+                     "PrivateEndMB":  115.8,
+                     "PrivateStartMB":  118.1
+                 },
+                 {
+                     "App":  "NEXUS",
+                     "Mode":  "minimized",
+                     "StartupMs":  265,
+                     "CpuAvgPct":  0.055,
+                     "CpuMaxPct":  0.385,
+                     "WorkingSetAvgMB":  66.3,
+                     "WorkingSetMaxMB":  66.7,
+                     "PrivateEndMB":  75.1,
+                     "PrivateStartMB":  75.3
+                 },
+                 {
+                     "App":  "Task Manager",
+                     "Mode":  "minimized",
+                     "StartupMs":  282,
+                     "CpuAvgPct":  1.262,
+                     "CpuMaxPct":  1.917,
+                     "WorkingSetAvgMB":  160.3,
+                     "WorkingSetMaxMB":  161.8,
+                     "PrivateEndMB":  114.8,
+                     "PrivateStartMB":  117.4
+                 }
+             ],
+    "Summary":  [
+                    {
+                        "App":  "NEXUS",
+                        "Mode":  "visible",
+                        "StartupMs":  297,
+                        "CpuAvgPct":  0.201,
+                        "CpuMaxPct":  0.576,
+                        "WorkingSetAvgMB":  67.6,
+                        "PrivateEndMB":  78.2
+                    },
+                    {
+                        "App":  "Task Manager",
+                        "Mode":  "visible",
+                        "StartupMs":  332,
+                        "CpuAvgPct":  0.504,
+                        "CpuMaxPct":  1.06,
+                        "WorkingSetAvgMB":  161.1,
+                        "PrivateEndMB":  115.8
+                    },
+                    {
+                        "App":  "NEXUS",
+                        "Mode":  "minimized",
+                        "StartupMs":  297,
+                        "CpuAvgPct":  0.047,
+                        "CpuMaxPct":  0.577,
+                        "WorkingSetAvgMB":  66.3,
+                        "PrivateEndMB":  75.2
+                    },
+                    {
+                        "App":  "Task Manager",
+                        "Mode":  "minimized",
+                        "StartupMs":  305,
+                        "CpuAvgPct":  0.722,
+                        "CpuMaxPct":  1.917,
+                        "WorkingSetAvgMB":  160.1,
+                        "PrivateEndMB":  115.1
+                    }
+                ]
+}

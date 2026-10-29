@@ -2,6 +2,26 @@
 
 ## Status
 
+**First comparison with Task Manager on a real PC (2026-10-28):** `scripts/benchmark.ps1`, elevated, 3 runs per mode,
+15 s warm-up, 120 one-second samples, both tools at their default update speed on the Processes page. Intel Core
+i5-14400F (16 logical processors), 15.8 GB, Windows 11 Home 26200, NVIDIA RTX 5060. NEXUS 0.9.0 built with MinGW-w64
+(GCC 16.2, WinLibs), commit `8796f99`. Raw data: [`benchmarks/benchmark-20261028-213841.json`](benchmarks/benchmark-20261028-213841.json).
+
+| App | Mode | Startup (ms) | CPU avg % | CPU max % | Working set avg (MB) | Private bytes end (MB) |
+|---|---|---:|---:|---:|---:|---:|
+| NEXUS | visible | 297 | 0.201 | 0.576 | 67.6 | 78.2 |
+| Task Manager | visible | 332 | 0.504 | 1.06 | 161.1 | 115.8 |
+| NEXUS | minimized | 297 | 0.047 | 0.577 | 66.3 | 75.2 |
+| Task Manager | minimized | 305 | 0.722 | 1.917 | 160.1 | 115.1 |
+
+CPU % is of the whole machine (all 16 logical processors). On this PC, in this test, NEXUS used about 40% of Task
+Manager's CPU when visible and under 10% when minimized, about 42% of its working set and 66% of its private bytes,
+and started slightly faster. The three runs agreed closely (NEXUS visible CPU 0.19–0.21%; one Task Manager minimized run
+averaged 1.26%, the others 0.44–0.46%). Private bytes stayed flat within each 2-minute run.
+
+Against the engineering targets below: idle CPU (< 0.5%) and startup (< 500 ms) are met; working set (67 MB vs < 40 MB)
+and process enumeration (7.95 ms average for 217 processes elevated, vs < 2 ms for 300) are not.
+
 **First Windows numbers (GitHub Actions `windows-2022` virtual machine, not a desktop PC):**
 
 | Measurement | Result |
@@ -19,8 +39,7 @@ performance characteristics:
 - many performance counters are stubs,
 - memory accounting differs.
 
-This document does **not** claim NEXUS uses fewer resources than Task Manager. That claim needs the measurements described below, on real
-hardware.
+Claims about NEXUS versus Task Manager should cite the real-PC results above (one machine so far), not the Wine or CI numbers.
 
 ## Methodology (`scripts/benchmark.ps1`)
 
