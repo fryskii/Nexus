@@ -184,14 +184,13 @@ public:
 
         Section(ui, x, w, L"Navigation");
         {
-            Rect c = Row(ui, x, w, L"Sections shown in the sidebar", L"Hide sections you don't use. Right-click a sidebar item for more options.", 40 + 12 * 30.f);
+            Rect c = Row(ui, x, w, L"Sections shown in the sidebar", L"Hide sections you don't use. Right-click a sidebar item for more options.", 46 + 4 * 30.f + 8);
             float yy = c.y + 46;
             for (int i = 0; i < 12; ++i) {
                 bool vis = app.PageVisibleInNav(static_cast<PageId>(i));
                 Rect cb{c.x + 16 + (i % 3) * (c.w / 3), yy + (i / 3) * 30, c.w / 3 - 20, 28};
                 if (ui.Checkbox(IdMix(Id("set.nav"), i), cb, vis, kPageNames[i])) app.SetPageHidden(static_cast<PageId>(i), !vis);
             }
-            y_ = c.y + 46 + 4 * 30 + 12;
         }
 
         Section(ui, x, w, L"Notifications");
@@ -244,9 +243,9 @@ public:
             float hgt = g.MeasureParagraph(about, w - 32, Font::Small) + 70;
             Rect c = Row(ui, x, w, L"", L"", hgt);
             g.Paragraph(about, {c.x + 16, c.y + 12, c.w - 32, hgt - 50}, Font::Small, t.textSecondary);
-            if (ui.Button(Id("set.cfgdir"), {c.x + 16, c.B() - 42, 170, 30}, L"Open settings folder"))
+            if (ui.Button(Id("set.cfgdir"), {c.x + 16, c.y + hgt - 42, 170, 30}, L"Open settings folder"))
                 ShellExecuteW(app.Hwnd(), L"open", app.ConfigDir().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-            if (ui.Button(Id("set.reset"), {c.x + 196, c.B() - 42, 170, 30}, L"Reset all settings", 0, ButtonStyle::Danger))
+            if (ui.Button(Id("set.reset"), {c.x + 196, c.y + hgt - 42, 170, 30}, L"Reset all settings", 0, ButtonStyle::Danger))
                 ui.Defer([this] {
                     if (app.Confirm(L"Reset all settings?", L"NEXUS will restore its default settings. Window layout and column choices are reset too.", L"Reset", true)) {
                         std::wstring path = app.ConfigDir() + L"\\nexus.ini";
