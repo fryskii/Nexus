@@ -157,7 +157,7 @@ private:
                 // Use a one-off elevated helper instead of elevating the whole UI.
                 auto r2 = std::make_shared<DWORD>(0);
                 std::wstring args = std::wstring(L"--svc ") + verb + L" " + QuoteArg(name);
-                worker::Run([r2, hwnd, args] { *r2 = RunSelfElevatedAndWait(hwnd, args); }, [this, r2, display, verb] {
+                worker::RunLong([r2, hwnd, args] { *r2 = RunSelfElevatedAndWait(hwnd, args); }, [this, r2, display, verb] {
                     busy_ = false;
                     if (*r2 == 0) app.ShowStatus(L"Service " + display + L": " + verb + L" completed");
                     else if (*r2 != ERROR_CANCELLED) app.ShowStatus(L"Could not " + std::wstring(verb) + L" " + display + L": " + LastErrorMessage(*r2), true);

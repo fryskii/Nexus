@@ -4,6 +4,7 @@
 
 #include <condition_variable>
 #include <deque>
+#include <memory>
 #include <mutex>
 #include <unordered_map>
 #include <vector>
@@ -27,6 +28,24 @@ UINT g_msg = 0;
 std::unordered_map<uint64_t, std::function<void()>> g_done;
 uint64_t g_nextId = 1;
 
+// Hands `done` to the UI thread.
+void Complete(std::function<void()> done) {
+    if (!done) return;
+    uint64_t id;
+    HWND hwnd;
+    {
+        std::lock_guard<std::mutex> l(g_lock);
+        if (g_quit) return;
+        id = g_nextId++;
+        g_done.emplace(id, std::move(done));
+        hwnd = g_hwnd;
+    }
+    if (!hwnd || !PostMessageW(hwnd, g_msg, 0, static_cast<LPARAM>(id))) {
+        std::lock_guard<std::mutex> l(g_lock);
+        g_done.erase(id);
+    }
+}
+
 DWORD WINAPI Loop(void*) {
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
@@ -40,20 +59,7 @@ DWORD WINAPI Loop(void*) {
             g_queue.pop_front();
         }
         if (t.work) t.work();
-        if (t.done) {
-            uint64_t id;
-            HWND hwnd;
-            {
-                std::lock_guard<std::mutex> l(g_lock);
-                id = g_nextId++;
-                g_done.emplace(id, std::move(t.done));
-                hwnd = g_hwnd;
-            }
-            if (!hwnd || !PostMessageW(hwnd, g_msg, 0, static_cast<LPARAM>(id))) {
-                std::lock_guard<std::mutex> l(g_lock);
-                g_done.erase(id);
-            }
-        }
+        Complete(std::move(t.done));
     }
     CoUninitialize();
     return 0;
@@ -90,6 +96,28 @@ void Run(std::function<void()> work, std::function<void()> done) {
         g_queue.push_back({std::move(work), std::move(done)});
     }
     g_cv.notify_one();
+}
+
+void RunLong(std::function<void()> work, std::function<void()> done) {
+    {
+        std::lock_guard<std::mutex> l(g_lock);
+        if (g_quit) return;
+    }
+    auto* t = new Task{std::move(work), std::move(done)};
+    HANDLE h = CreateThread(nullptr, 0, [](void* p) -> DWORD {
+        std::unique_ptr<Task> task(static_cast<Task*>(p));
+        CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        if (task->work) task->work();
+        Complete(std::move(task->done));
+        CoUninitialize();
+        return 0;
+    }, t, 0, nullptr);
+    if (h) {
+        CloseHandle(h);
+    } else { // fall back to the queue
+        Run(std::move(t->work), std::move(t->done));
+        delete t;
+    }
 }
 
 void DispatchCompletion(LPARAM lp) {
