@@ -19,9 +19,21 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
 endif()
 
+# The version shown by NEXUS and in file names: the project version plus an optional pre-release
+# label, which CI sets for tagged releases (0.9.0-alpha.2) and for other pushes (0.9.0-dev.<commit>).
+set(NEXUS_VERSION_LABEL "" CACHE STRING "Pre-release label appended to the version, e.g. alpha.2")
+if(NOT NEXUS_VERSION_LABEL MATCHES "^[0-9A-Za-z.]*$")
+  message(FATAL_ERROR "NEXUS_VERSION_LABEL may only contain letters, digits and dots")
+endif()
+if(NEXUS_VERSION_LABEL)
+  set(NEXUS_VERSION_FULL "${PROJECT_VERSION}-${NEXUS_VERSION_LABEL}")
+else()
+  set(NEXUS_VERSION_FULL "${PROJECT_VERSION}")
+endif()
+
 set(NEXUS_DEFS UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX
     _WIN32_WINNT=0x0A00 WINVER=0x0A00 NTDDI_VERSION=0x0A00000B
-    NEXUS_VERSION_STR="${PROJECT_VERSION}")
+    NEXUS_VERSION_STR="${NEXUS_VERSION_FULL}")
 
 # ---- Core library: platform-neutral logic (unit-testable on any host) ----
 add_library(nexus_core STATIC
@@ -33,7 +45,7 @@ add_library(nexus_core STATIC
   src/core/Regex.cpp
 )
 target_include_directories(nexus_core PUBLIC src)
-target_compile_definitions(nexus_core PUBLIC NEXUS_VERSION_STR="${PROJECT_VERSION}")
+target_compile_definitions(nexus_core PUBLIC NEXUS_VERSION_STR="${NEXUS_VERSION_FULL}")
 
 if(WIN32)
   set(NEXUS_SOURCES

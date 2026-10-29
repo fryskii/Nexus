@@ -51,7 +51,7 @@ jobs:
           if (-not $p.WaitForExit(240000)) { "::error::stress run did not finish (hang)"; Stop-Process $p -Force; exit 1 }
           if (-not (Test-Path "$csv.summary.txt")) { "::error::stress run wrote no summary (exit code $($p.ExitCode))"; exit 1 }
           Get-Content "$csv.summary.txt" | Select-Object -First 12 | ForEach-Object { "::notice::stress: $_" }
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: NEXUS-msvc
@@ -69,8 +69,25 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - run: sudo apt-get update && sudo apt-get install -y ninja-build g++-mingw-w64-x86-64-posix nsis zip
+      - name: Version label
+        # A tag v<version>-<label> labels the build (0.9.0-alpha.2); other pushes get dev.<commit>.
+        run: |
+          version="$(sed -n 's/^project(NEXUS VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            tag="${GITHUB_REF_NAME#v}"
+            if [[ "${tag%%-*}" != "$version" ]]; then
+              echo "::error::tag $GITHUB_REF_NAME does not match version $version in CMakeLists.txt"
+              exit 1
+            fi
+            label="${tag#"$version"}"
+            label="${label#-}"
+          else
+            label="dev.${GITHUB_SHA::7}"
+          fi
+          echo "NEXUS_VERSION_LABEL=$label" >> "$GITHUB_ENV"
+          echo "::notice::version $version${label:+-$label}"
       - run: ./scripts/package.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: NEXUS-dist
           path: dist/*
@@ -89,7 +106,7 @@ jobs:
       - name: Fuzz (5 min)
         run: tests/fuzz/run.sh "$RUNNER_TEMP/fuzz" 300
   # Pushing a tag such as v0.9.0-alpha.1 publishes the cross-built installer and zip as a GitHub
-  # pre-release, once every other job has passed.
+  # release, once every other job has passed: a pre-release when the tag has a label (v0.9.0-alpha.2).
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [msvc, mingw-cross, core-linux]
@@ -98,13 +115,15 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: NEXUS-dist
           path: dist
-      - name: Publish pre-release
+      - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" --prerelease --title "NEXUS $GITHUB_REF_NAME" \
+          pre=""
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then pre="--prerelease"; fi
+          gh release create "$GITHUB_REF_NAME" $pre --title "NEXUS $GITHUB_REF_NAME" \
             --notes-file docs/RELEASE_NOTES.md dist/*.zip dist/*-setup-x64.exe dist/SHA256SUMS.txt

@@ -7,6 +7,9 @@ SetCompressor /SOLID lzma
 !ifndef VERSION
   !define VERSION "0.9.0"
 !endif
+!ifndef VERSION_NUMBER
+  !define VERSION_NUMBER "${VERSION}" ; numeric x.y.z; VERSION may end in a label (0.9.0-alpha.2)
+!endif
 !ifndef SRCDIR
   !define SRCDIR "..\build\Release"
 !endif
@@ -23,7 +26,7 @@ InstallDir "$PROGRAMFILES64\NEXUS"
 InstallDirRegKey HKLM "Software\NEXUS" "InstallDir"
 BrandingText "NEXUS ${VERSION}"
 
-VIProductVersion "${VERSION}.0"
+VIProductVersion "${VERSION_NUMBER}.0"
 VIAddVersionKey "ProductName" "NEXUS"
 VIAddVersionKey "FileDescription" "NEXUS installer"
 VIAddVersionKey "FileVersion" "${VERSION}"
@@ -47,6 +50,29 @@ VIAddVersionKey "LegalCopyright" "MIT License"
 
 !define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\NEXUS"
 
+; Closes running copies so that NEXUS.exe can be replaced or removed. They are asked first (and save
+; their settings); copies still running after 3 seconds, for example hidden in the tray by "close to
+; tray", are ended.
+!macro CloseNexus
+  nsExec::Exec 'taskkill /IM NEXUS.exe'
+  Pop $0
+  ${If} $0 == 0
+    StrCpy $1 0
+    ${Do}
+      Sleep 250
+      nsExec::Exec 'cmd /c tasklist /FI "IMAGENAME eq NEXUS.exe" /NH | find /I "NEXUS.exe"'
+      Pop $0
+      ${If} $0 != 0
+        ${ExitDo}
+      ${EndIf}
+      IntOp $1 $1 + 1
+    ${LoopUntil} $1 >= 12
+    nsExec::Exec 'taskkill /F /IM NEXUS.exe'
+    Pop $0
+    Sleep 250
+  ${EndIf}
+!macroend
+
 Function .onInit
   ${IfNot} ${RunningX64}
     MessageBox MB_ICONSTOP "NEXUS requires 64-bit Windows 10 or Windows 11."
@@ -57,8 +83,7 @@ FunctionEnd
 
 Section "NEXUS (required)" SecMain
   SectionIn RO
-  ; Close a running copy so the executable can be replaced.
-  nsExec::Exec 'taskkill /IM NEXUS.exe'
+  !insertmacro CloseNexus
   SetOutPath "$INSTDIR"
   File "${SRCDIR}\NEXUS.exe"
   File "..\LICENSE"
@@ -106,7 +131,7 @@ FunctionEnd
 
 Section "un.NEXUS" UnSecMain
   SectionIn RO
-  nsExec::Exec 'taskkill /IM NEXUS.exe'
+  !insertmacro CloseNexus
   ; Restore Task Manager only if it currently points at NEXUS.
   ReadRegStr $0 HKLM "SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\taskmgr.exe" "Debugger"
   StrCmp $0 "" +3

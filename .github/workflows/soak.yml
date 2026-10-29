@@ -38,7 +38,7 @@ jobs:
             "{0,6:N0}s private {1,6:N1} MB  handles {2,5}  gdi {3,4}  user {4,4}  threads {5,3}" -f [double]$r.seconds, ([double]$r.private_bytes / 1MB), $r.handles, $r.gdi_objects, $r.user_objects, $r.threads
           }
           "::notice::trend%0A" + ($trend -join '%0A')
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: soak-results
