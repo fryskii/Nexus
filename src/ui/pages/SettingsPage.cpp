@@ -1,5 +1,6 @@
 // Settings: appearance, data collection, window/startup behaviour, navigation, notifications,
 // history recording, keyboard shortcuts and privacy information.
+#include "data/Worker.h"
 #include "ui/pages/Common.h"
 
 #include <shellapi.h>
@@ -179,7 +180,7 @@ public:
                          L"\"Debugger\" setting and needs administrator approval. Turn off to restore Task Manager.");
             bool on = ReplacesTaskManager();
             bool v = on;
-            if (ui.Toggle(Id("set.replace"), {c.R() - 60, c.y, 60, c.h}, v)) ui.Defer([this, v] { SetReplaceTaskManager(v); });
+            if (ui.Toggle(Id("set.replace"), {c.R() - 60, c.y, 60, c.h}, v) && !replaceBusy_) ui.Defer([this, v] { SetReplaceTaskManager(v); });
         }
 
         Section(ui, x, w, L"Navigation");
@@ -367,16 +368,22 @@ private:
                 return;
             }
         }
-        DWORD e = RunSelfElevatedAndWait(app.Hwnd(), std::wstring(L"--taskmgr-replace ") + (on ? L"1" : L"0"));
-        if (e == ERROR_CANCELLED) return;
-        if (e == ERROR_INVALID_OWNER) app.ShowStatus(L"Not changed: NEXUS must be installed in a folder only administrators can change", true);
-        else if (e) app.ShowStatus(L"Could not change the Task Manager replacement: " + LastErrorMessage(e), true);
-        else app.ShowStatus(on ? L"NEXUS now opens instead of Task Manager" : L"Task Manager restored");
+        // On a thread of its own: the elevated helper waits for the UAC prompt.
+        replaceBusy_ = true;
+        auto e = std::make_shared<DWORD>(0);
+        HWND hwnd = app.Hwnd();
+        worker::RunLong([e, hwnd, on] { *e = RunSelfElevatedAndWait(hwnd, std::wstring(L"--taskmgr-replace ") + (on ? L"1" : L"0")); }, [this, e, on] {
+            replaceBusy_ = false;
+            if (*e == ERROR_CANCELLED) return;
+            if (*e == ERROR_INVALID_OWNER) app.ShowStatus(L"Not changed: NEXUS must be installed in a folder only administrators can change", true);
+            else if (*e) app.ShowStatus(L"Could not change the Task Manager replacement: " + LastErrorMessage(*e), true);
+            else app.ShowStatus(on ? L"NEXUS now opens instead of Task Manager" : L"Task Manager restored");
+        });
     }
 
     float scroll_ = 0, y_ = 0;
     NativeEdit nameEdit_;
-    bool nameEditPlaced_ = false;
+    bool nameEditPlaced_ = false, replaceBusy_ = false;
 };
 
 } // namespace

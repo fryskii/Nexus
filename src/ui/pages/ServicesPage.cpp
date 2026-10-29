@@ -175,18 +175,29 @@ private:
 
     void SetStartType(uint32_t type, bool delayed) {
         const ServiceInfo* s = Selected();
-        if (!s) return;
-        std::wstring name = s->name;
+        if (!s || busy_) return;
+        std::wstring name = s->name, display = s->displayName;
+        // Without elevation, the elevated helper asks for this confirmation in its own window.
         if (type == SERVICE_DISABLED && app.Elevated() &&
-            !app.Confirm(L"Disable " + s->displayName + L"?", L"It will no longer start, even when Windows or other programs need it.", L"Disable service", true))
+            !app.Confirm(L"Disable " + display + L"?", L"It will no longer start, even when Windows or other programs need it.", L"Disable service", true))
             return;
-        DWORD e = SetServiceStartType(name, type, delayed);
-        if (e == ERROR_ACCESS_DENIED && !app.Elevated())
-            e = RunSelfElevatedAndWait(app.Hwnd(), L"--svc-starttype " + QuoteArg(name) + L" " + std::to_wstring(type) + (delayed ? L" 1" : L" 0"));
-        if (e && e != ERROR_CANCELLED) app.ShowStatus(L"Could not change the startup type: " + LastErrorMessage(e), true);
-        else if (!e) app.ShowStatus(L"Startup type changed for " + s->displayName);
-        configs_.clear();
-        Load();
+        busy_ = true;
+        busyText_ = L"Changing the startup type of " + display + L"…";
+        auto e = std::make_shared<DWORD>(0);
+        HWND hwnd = app.Hwnd();
+        bool elevated = app.Elevated();
+        // On a thread of its own: the elevated helper waits for the UAC prompt and its confirmation.
+        worker::RunLong([e, name, type, delayed, hwnd, elevated] {
+            *e = SetServiceStartType(name, type, delayed);
+            if (*e == ERROR_ACCESS_DENIED && !elevated)
+                *e = RunSelfElevatedAndWait(hwnd, L"--svc-starttype " + QuoteArg(name) + L" " + std::to_wstring(type) + (delayed ? L" 1" : L" 0"));
+        }, [this, e, display] {
+            busy_ = false;
+            if (*e && *e != ERROR_CANCELLED) app.ShowStatus(L"Could not change the startup type: " + LastErrorMessage(*e), true);
+            else if (!*e) app.ShowStatus(L"Startup type changed for " + display);
+            configs_.clear();
+            Load();
+        });
     }
 
     void Menu() {
@@ -224,11 +235,7 @@ private:
         case 30: SetStartType(SERVICE_AUTO_START, false); break;
         case 31: SetStartType(SERVICE_AUTO_START, true); break;
         case 32: SetStartType(SERVICE_DEMAND_START, false); break;
-        case 33:
-            if (app.Confirm(L"Disable " + display + L"?", L"Disabling services can break Windows features or applications. Only disable services you understand.",
-                            L"Disable", true))
-                SetStartType(SERVICE_DISABLED, false);
-            break;
+        case 33: SetStartType(SERVICE_DISABLED, false); break;
         }
     }
 

@@ -49,11 +49,11 @@ public:
         Rect r = area;
         Rect bar = r.TakeTop(44);
         const StartupItem* s = Selected();
-        bool can = s && s->editable;
+        bool can = s && s->editable && !busy_;
         if (ui.Button(Id("st.enable"), {bar.R() - 230, bar.y + 4, 110, 32}, L"Enable", 0xE73E, ButtonStyle::Standard, can && !s->enabled)) Toggle();
         if (ui.Button(Id("st.disable"), {bar.R() - 112, bar.y + 4, 112, 32}, L"Disable", 0xE711, ButtonStyle::Standard, can && s->enabled)) Toggle();
         size_t enabled = std::count_if(items_.begin(), items_.end(), [](const StartupItem& i) { return i.enabled; });
-        std::wstring info = loading_ ? L"Loading…" : std::to_wstring(items_.size()) + L" startup items, " + std::to_wstring(enabled) + L" enabled";
+        std::wstring info = busy_ ? busyText_ : loading_ ? L"Loading…" : std::to_wstring(items_.size()) + L" startup items, " + std::to_wstring(enabled) + L" enabled";
         if (s && !s->editable) info += L"   ·   Packaged app tasks are managed in Settings › Apps › Startup";
         ui.g.Text(info, {bar.x, bar.y, bar.w - 250, 40}, Font::Small, ui.t.textTertiary);
         if (grid_.Dirty() || table_.sortChanged) { grid_.Refresh(table_); table_.sortChanged = false; }
@@ -123,16 +123,29 @@ private:
 
     void Toggle() {
         const StartupItem* s = Selected();
-        if (!s || !s->editable) return;
+        if (!s || !s->editable || busy_) return;
         bool enable = !s->enabled;
         std::wstring name = s->name;
-        DWORD e;
-        if (s->approvedRoot == HKEY_LOCAL_MACHINE && !app.Elevated())
-            e = RunSelfElevatedAndWait(app.Hwnd(), L"--startup-set " + QuoteArg(s->approvedKey.substr(s->approvedKey.find_last_of(L'\\') + 1)) + L" " +
-                                                       QuoteArg(s->approvedValue) + L" " + (enable ? L"1" : L"0"));
-        else
-            e = SetStartupItemEnabled(s->approvedRoot, s->approvedKey, s->approvedValue, enable);
-        if (e == ERROR_CANCELLED) return;
+        if (s->approvedRoot == HKEY_LOCAL_MACHINE && !app.Elevated()) {
+            // All-users entries go through the elevated helper, which waits for the UAC prompt (and its
+            // confirmation): wait on a thread of its own so the window stays responsive.
+            busy_ = true;
+            busyText_ = std::wstring(enable ? L"Enabling " : L"Disabling ") + name + L"…";
+            auto e = std::make_shared<DWORD>(0);
+            HWND hwnd = app.Hwnd();
+            std::wstring args = L"--startup-set " + QuoteArg(s->approvedKey.substr(s->approvedKey.find_last_of(L'\\') + 1)) + L" " +
+                                QuoteArg(s->approvedValue) + L" " + (enable ? L"1" : L"0");
+            worker::RunLong([e, hwnd, args] { *e = RunSelfElevatedAndWait(hwnd, args); }, [this, e, name, enable] {
+                busy_ = false;
+                Toggled(*e, name, enable);
+            });
+            return;
+        }
+        Toggled(SetStartupItemEnabled(s->approvedRoot, s->approvedKey, s->approvedValue, enable), name, enable);
+    }
+
+    void Toggled(DWORD e, const std::wstring& name, bool enable) {
+        if (e == ERROR_CANCELLED) { app.Invalidate(); return; }
         if (e) app.ShowStatus(L"Could not change " + name + L": " + LastErrorMessage(e), true);
         else app.ShowStatus(name + (enable ? L" will start with Windows" : L" will no longer start with Windows"));
         Load();
@@ -159,7 +172,8 @@ private:
     Table table_;
     SimpleGrid grid_;
     std::vector<StartupItem> items_;
-    bool loading_ = false;
+    bool loading_ = false, busy_ = false;
+    std::wstring busyText_;
 };
 
 } // namespace
