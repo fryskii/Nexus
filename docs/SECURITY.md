@@ -18,7 +18,7 @@ attackers who are already administrator are out of scope.
 | Surface | Risk | Protection |
 |---|---|---|
 | Task Manager replacement (IFEO `Debugger`) | Point Task Manager at another program, or swap NEXUS.exe, to run code elevated on Ctrl+Shift+Esc | The helper only registers its own executable, and only if `IsProtectedFromNonAdmins` confirms that the file, its folder and every parent folder are owned by and only changeable by Administrators, SYSTEM or TrustedInstaller (junctions resolved first). Install with the installer (Program Files). |
-| Elevated helper commands (`--svc`, `--svc-starttype`, `--startup-set`, `--taskmgr-replace`) | Get a NEXUS-branded UAC prompt approved for an attacker-chosen action | Arguments are untrusted: only existing services and existing machine-wide startup entries, no paths or registry locations from the command line, fixed value sets. Stopping, pausing, restarting or disabling a service and re-enabling a startup entry are confirmed in the elevated window, which lower-privilege programs cannot click (UIPI). Arguments are built with `QuoteArg`. |
+| Elevated helper commands (`--svc`, `--svc-starttype`, `--startup-set`, `--taskmgr-replace`) | Get a NEXUS-branded UAC prompt approved for an attacker-chosen action | Arguments are untrusted: only existing services and existing machine-wide startup entries, no paths or registry locations from the command line, fixed value sets. Stopping, pausing, restarting or disabling a service and re-enabling a startup entry are confirmed in the elevated window, which lower-privilege programs cannot click (UIPI); that confirmation is shown topmost and in the foreground, so it cannot be left waiting unseen behind NEXUS. Arguments are built with `QuoteArg`. |
 | DLL loading | Plant a DLL (e.g. `version.dll`) next to NEXUS.exe | Non-KnownDLL imports are delay-loaded and resolved from System32 only (`SetDefaultDllDirectories`); the PE load config also sets `DependentLoadFlags` to System32. |
 | File writes while elevated (settings, history, exports, dumps) | Replace a profile folder with a junction or symlink, or plant a link in place of a file, to redirect an administrator's write into a system folder | `SafeWriteGuard` (src/core/SafeFile.h): no network or device paths; no junction or symbolic link anywhere on the path; every folder held open without delete sharing during the write; files are never truncated in place (new file + rename); links and hard-linked files are refused, checked on the opened handle; the opened file must resolve into the locked folder. |
 | Settings file (user-editable) | Point the history folder at a system folder | Elevated, the history folder must be inside your profile; otherwise the default is used. |
@@ -39,11 +39,15 @@ attackers who are already administrator are out of scope.
   Checks that the platform cannot stage are reported as *skipped*, never as passed.
 - `tests/fuzz`: libFuzzer + sanitizers over the parsers, including the regex engine.
 
-Results under Wine: all runnable checks pass. Junctions, real symbolic links and stored file ACLs are
-not available there, so those three checks are skipped and **must be run on Windows**:
+Results on Windows: **25 passed, 0 failed, 0 skipped**, both on every CI run (GitHub Actions
+`windows-2022`, elevated) and on a real Windows 11 PC (2026-10-28, run from an elevated prompt).
+To run them yourself:
 
     # elevated PowerShell, from the build folder
     .\nexus_security_tests.exe
+
+Under Wine, junctions, real symbolic links and stored file ACLs are not available, so those three
+checks are skipped there.
 
 Also verified under Wine: a planted `version.dll` is not loaded; the helpers refuse a foreign
 Task Manager path, arbitrary HKLM keys, unknown services and invalid values; a history folder set to
@@ -52,7 +56,11 @@ Task Manager path, arbitrary HKLM keys, unknown services and invalid values; a h
 ## Known limitations
 
 - NEXUS is not code-signed yet, so the UAC prompt shows "Unknown publisher".
-- Not yet independently reviewed or tested on a real Windows installation.
+- Not yet independently reviewed. Tested on Windows by CI and on one real Windows 11 PC.
+- Changing a service's start type, toggling a startup entry and the Task Manager replacement wait for
+  the elevated helper on the UI thread, so the NEXUS window does not respond until the UAC prompt and
+  the confirmation are answered (up to 5 minutes). Stopping, starting and restarting services wait on a
+  separate thread.
 - Folders that NEXUS creates (`SHCreateDirectoryEx`) are created before the guard runs; at most an
   empty folder could be created through a junction, and only inside the profile or NEXUS's own folders.
 

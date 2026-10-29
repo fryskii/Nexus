@@ -23,6 +23,22 @@ ctest --test-dir build -C Release --output-on-failure
 
 The executable is `build\Release\NEXUS.exe`. The static CRT (`/MT`) is used, so it runs without the VC++ redistributable.
 
+## Windows, MinGW-w64 (no Visual Studio needed)
+
+With a native MinGW-w64 toolchain that includes CMake and Ninja, for example WinLibs
+(`winget install BrechtSanders.WinLibs.POSIX.UCRT`), from PowerShell with its `bin` folder on `PATH`:
+
+```powershell
+cmake -S . -B build-mingw -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build-mingw
+.\build-mingw\nexus_tests.exe
+.\build-mingw\NEXUS.exe
+```
+
+The linker warns ".rsrc merge failure: multiple non-default manifests" because the toolchain adds a
+default manifest; NEXUS's own manifest is the first one and is the one Windows uses. Close NEXUS
+before rebuilding, or linking fails with "Permission denied".
+
 ## Linux, cross-compiling with MinGW-w64
 
 This path was used to produce and test the binaries in this repository.
