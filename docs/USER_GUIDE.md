@@ -47,11 +47,13 @@ Ctrl+B collapses the sidebar.
   - Suspend / resume
   - Set priority and affinity
   - Create a full dump or minidump
+  - Analyze wait chain: which threads are blocked, on what, and whether in a deadlock
   - Go to details or services
   - Open file location, search online, copy fields, Properties
   - Inspect (Enter)
 - Destructive actions ask for confirmation. NEXUS refuses to end or suspend critical Windows processes, because Windows would stop with a bugcheck.
 - *Power usage* is a NEXUS estimate based on CPU, GPU, I/O and network activity. It is not a wattage.
+- Without administrator rights the *Network* column shows "—". A bar under the list explains why and offers *Restart as administrator*; × hides it.
 
 ## Process inspector
 

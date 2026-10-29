@@ -51,8 +51,10 @@ To check on Windows 11: icon glyphs, gradient transparency, snap layouts, maximi
 
 Tooling and Wine results are in docs/STRESS_TESTING.md (fuzzing, `--stress` mode, `nexus_churn`).
 Five bugs were found and fixed (regex freeze/stack overflow, numeric UB, settings whitespace, timer
-starvation, per-frame resource creation). Still to do on Windows 11: `scripts\stress.ps1` for 30+ minutes
-with 300 churned processes; check private bytes, handles and GDI/USER objects (Wine reports 0).
+starvation, per-frame resource creation). On Windows 11 (2026-10-29, i5-14400F, `scripts\stress.ps1`,
+30 minutes, 300 churned processes, 10 replaced per second): no hang or crash; handles, GDI/USER objects
+and threads flat; between the 3rd and last decile private bytes went 206 → 213 MB and working set
+115 → 121 MB. A slow drift; every per-process cache checked is bounded, so watch it in the 8-hour soak.
 
 ## Continuous integration
 
@@ -92,14 +94,26 @@ Tested on an i5-14400F / RTX 5060 / Windows 11 Home 26200 PC, built natively wit
   (requested streams, all memory, unique file names); a dump of csrss.exe is refused without
   leaving a file; wait chains found mutex and critical-section deadlocks and a process wait in
   about 0.3 s each, also on a suspended process.
-- **Next:** settings/integration (persistence, portable, start with Windows, tray, mini monitor,
-  Task Manager replacement); installer (needs NSIS); DPI/light theme.
-- **Ideas noted:** without admin the Network column only shows "—" (reason in its tooltip); a
-  visible "run as administrator" hint would help. Changing a service start type and toggling
-  startup apps still wait for the elevated helper on the UI thread (window freezes until answered).
-  Wait-chain wording: a process wait shows "thread 0 (PID n)" instead of the process; a thread
-  waiting on a deadlocked thread is counted "in a deadlock cycle"; a suspended process reports "not
-  blocked by a wait chain" (could say its threads are suspended).
+- **Next:** the tester's report (below); settings/integration (persistence, portable, start with
+  Windows, tray, mini monitor, Task Manager replacement); installer (CI builds it: test the release's
+  setup.exe); DPI/light theme.
+- **Fixed 2026-10-29, not yet clicked through in the UI:** a bar under the process list explains
+  the Network column's "—" without admin and offers Restart as administrator (× hides it,
+  `processes.netHint`); changing a service start type, toggling an all-users startup app and the
+  Task Manager replacement switch wait for the elevated helper on a thread of their own instead of
+  freezing the window; disabling a service asks once instead of twice; wait-chain reports name the
+  process a process wait is for, separate threads in a deadlock from threads waiting on one, and say
+  when the process is suspended (`DescribeWaitChains` in ProcessDetails.cpp, checked against a
+  deliberately deadlocked test app).
+- **Tester report (Dell Latitude 7410, Windows 11 25H2): "crashed my computer 3 times".** His video
+  shows NEXUS's window going "Not Responding" about 60 s after start while the disk is 100% busy:
+  the 60-second save (`kTimerSave` → `SaveSettings` → `WriteFileAtomic` with `FlushFileBuffers`,
+  plus `recorder_.Flush()`) runs on the UI thread and waits for the disk. The "3" probably comes from
+  the System diagnostics card (3 Kernel-Power 41 events in 30 days, likely before NEXUS was
+  installed). Proposed fix: do the periodic save on a worker thread; show the dates in that card.
+  Asked the tester: whole-PC freeze or only NEXUS, disk active time with NEXUS closed, dates of the
+  Kernel-Power 41 events. Also seen: the Crashes tab query took 25+ s on that disk and holds one of
+  the two shared worker threads meanwhile (candidate for `worker::RunLong`).
 
 ## Validation plan (next session on Windows 11)
 
