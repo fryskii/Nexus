@@ -20,8 +20,10 @@ param(
     [int]$Seconds = 120,
     [int]$WarmupSeconds = 15,
     [int]$Runs = 3,
-    [string]$OutDir = (Join-Path (Split-Path -Parent $PSScriptRoot) "docs\benchmarks")
+    [string]$OutDir = ""
 )
+# Windows PowerShell 5.1 leaves $PSScriptRoot empty in parameter defaults, so resolve it here.
+if (-not $OutDir) { $OutDir = Join-Path (Split-Path -Parent $PSScriptRoot) "docs\benchmarks" }
 $ErrorActionPreference = "Stop"
 Add-Type @"
 using System;
@@ -106,7 +108,7 @@ Start-Process -FilePath $Nexus -ArgumentList @("--bench", "`"$benchJson`"", "100
 $os = Get-CimInstance Win32_OperatingSystem
 $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
 $machine = [pscustomobject]@{
-    Computer = $env:COMPUTERNAME; OS = "$($os.Caption) $($os.Version)"; CPU = $cpu.Name; LogicalProcessors = $cores
+    OS = "$($os.Caption) $($os.Version)"; CPU = $cpu.Name; LogicalProcessors = $cores
     MemoryGB = [math]::Round($os.TotalVisibleMemorySize / 1MB, 1); Elevated = $isAdmin; Date = (Get-Date).ToString("s")
     Seconds = $Seconds; Warmup = $WarmupSeconds; Runs = $Runs
 }
