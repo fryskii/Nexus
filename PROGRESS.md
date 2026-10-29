@@ -71,6 +71,24 @@ redirection (SafeWriteGuard); history folder confined to the profile when elevat
 administrators; pointer-free window messages; bounded cross-process reads. To do on Windows: run
 `nexus_security_tests.exe` elevated (junction, symlink and ACL checks are skipped under Wine).
 
+## Where we left off (2026-10-28, first session on a real Windows 11 PC)
+
+Tested on an i5-14400F / RTX 5060 / Windows 11 Home 26200 PC, built natively with WinLibs MinGW-w64
+(no Visual Studio on that PC: `cmake -S . -B build-mingw -G Ninja -DCMAKE_BUILD_TYPE=Release`,
+`cmake --build build-mingw`). Unit tests 160/160, elevated security tests 25/25, CI green on `bcec2ff`.
+
+- **Benchmark vs Task Manager done:** see docs/BENCHMARKS.md. NEXUS wins on CPU, memory and startup;
+  the working-set (< 40 MB) and enumeration (< 2 ms) targets are not met yet.
+- **Smoke-test parts 1–3 done** (ticked below), with fixes for: widget-ID collisions, insights cards,
+  invisible text colours, layout overlaps, frame pacing, slow re-sort, the hidden elevated-helper
+  confirmation, worker starvation, boxed/fitted headers and horizontal table scrolling.
+- **Next:** part 4, process actions on a test app (efficiency mode, priority, affinity,
+  suspend/resume, dumps, wait chain); then settings/integration (persistence, portable, start with
+  Windows, tray, mini monitor, Task Manager replacement); installer (needs NSIS); DPI/light theme.
+- **Ideas noted:** without admin the Network column only shows "—" (reason in its tooltip); a
+  visible "run as administrator" hint would help. Changing a service start type and toggling
+  startup apps still wait for the elevated helper on the UI thread (window freezes until answered).
+
 ## Validation plan (next session on Windows 11)
 
 1. Build with MSVC: `scripts\build.ps1`. Fix any compiler differences; MinGW was the only compiler used so far.
@@ -84,17 +102,17 @@ administrators; pointer-free window messages; bounded cross-process reads. To do
 
 ### Smoke-test checklist
 
-- [ ] Processes: grouping (apps own their child processes), tree, flat, search terms, sort, column chooser, header totals, heat map
-- [ ] End task / tree on a test app; refusal for csrss.exe; access-denied → restart-as-admin offer
+- [x] Processes: grouping (apps own their child processes), tree, flat, search terms, sort, column chooser, header totals, heat map
+- [x] End task / tree on a test app; refusal for csrss.exe (access-denied → restart-as-admin offer not yet seen)
 - [ ] Efficiency mode on/off (leaf status, Task Manager agrees); priority; affinity; suspend/resume; full dump and minidump; wait chain
-- [ ] Performance: CPU % matches Task Manager (±2%), speed, logical-processor graphs, memory composition, disks, adapters, GPU engines and temperature
-- [ ] Details: all columns populated; sort by every column
-- [ ] Services: start/stop/restart (non-elevated → UAC helper), start-type change
-- [ ] Startup: disable an HKCU entry → Task Manager shows Disabled; an HKLM entry through the helper
-- [ ] Users: per-user totals; disconnect and sign off in a second session
-- [ ] Network: per-process traffic when elevated, connections, history, ping, DNS
-- [ ] Storage: NVMe health and SATA SMART (elevated), partitions, volumes
-- [ ] Diagnostics: findings appear under synthetic load (CPU burner, a leaking test app); events, crashes, drivers, report export
+- [x] Performance: CPU % matches Task Manager (±2%), speed, logical-processor graphs, memory composition, disks, adapters, GPU engines and temperature
+- [x] Details: all columns populated; sort by every column
+- [x] Services: start/stop/restart (non-elevated → UAC helper), start-type change
+- [x] Startup: disable an HKCU entry → Task Manager shows Disabled (HKLM entry through the helper: confirm)
+- [ ] Users: per-user totals ✓; disconnect and sign off in a second session (not tested: single-user PC)
+- [x] Network: per-process traffic when elevated, connections, history, ping, DNS
+- [ ] Storage: NVMe health ✓, volumes ✓; SATA SMART not tested (no SATA drive)
+- [ ] Diagnostics: events, crashes, drivers, report export ✓; findings under synthetic load not tested
 - [ ] Settings persist across restarts; portable mode; start with Windows; replace Task Manager on/off; tray; mini monitor
 - [ ] Installer: install, upgrade over a running instance, uninstall leaves no files or registry entries (except user data unless selected)
 
