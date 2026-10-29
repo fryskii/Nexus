@@ -84,8 +84,10 @@ Tested on an i5-14400F / RTX 5060 / Windows 11 Home 26200 PC, built natively wit
 - **Smoke-test parts 1–3 done** (ticked below), with fixes for: widget-ID collisions, insights cards,
   invisible text colours, layout overlaps, frame pacing, slow re-sort, the hidden elevated-helper
   confirmation, worker starvation, boxed/fitted headers and horizontal table scrolling.
-- **Early preview released 2026-10-28:** v0.9.0-alpha.1, a GitHub pre-release built by CI from a
-  `v*` tag (notes in docs/RELEASE_NOTES.md).
+- **Test builds:** v0.9.0-alpha.1 (2026-10-28) and v0.9.0-alpha.2 (2026-10-29: the freeze fix,
+  crash reports and the rest below), GitHub pre-releases built by CI from `v*` tags (notes in
+  docs/RELEASE_NOTES.md, history in CHANGELOG.md). The alpha.2 download was checked: checksums match
+  and NEXUS.exe carries the 0.9.0-alpha.2 label.
 - **Smoke-test part 4 done** on a copy of PING.EXE run from %TEMP% (System32 binaries count as
   Windows processes, which are refused Efficiency mode by design), each result confirmed outside
   NEXUS: efficiency mode on (EcoQoS + Idle) and off, Below normal priority, affinity to CPUs 0-1,
