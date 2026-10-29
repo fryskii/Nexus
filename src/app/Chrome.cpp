@@ -415,6 +415,7 @@ void App::DrawInsights(Ui& ui, Rect r) {
         }
         if (ui.Clicked(id) && !c.device.empty()) {
             settings_.SetString("performance.device", c.device);
+            settings_.SetBool("performance.summary", false);
             ui.Defer([this] { Navigate(PageId::Performance); });
         }
         ui.Tooltip(id, L"Open in Performance");

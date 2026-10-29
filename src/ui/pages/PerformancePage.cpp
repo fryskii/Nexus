@@ -28,11 +28,15 @@ public:
     wchar_t Glyph() const override { return 0xE9D2; }
     uint32_t Demand() const override { return demand::Disk | demand::PerCore | demand::GpuSystem | demand::GpuSensors | demand::Thermal; }
     void OnShow() override {
+        // The insights rail picks a device by setting performance.device before navigating here.
+        selected_ = app.Config().GetString("performance.device", selected_);
+        summary_ = app.Config().GetBool("performance.summary", summary_);
         app.EnsureSystemInfo();
         app.EnsureDiskInfo(false);
         app.EnsureNicInfo();
         app.EnsureGpuInfo();
     }
+    void OnHide() override { SaveState(); }
     void SaveState() override {
         app.Config().SetString("performance.device", selected_);
         app.Config().SetBool("performance.cpu.logical", logical_);
