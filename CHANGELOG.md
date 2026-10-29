@@ -2,6 +2,14 @@
 
 Test builds are on the [Releases page](https://github.com/fryskii/Nexus/releases).
 
+## Unreleased
+
+Fixed
+- Memory grew by a few KB every time a process inspector window was opened and closed (about 10 MB an hour in a 6-hour
+  stress run): each window created a Direct2D factory of its own. All windows now share one.
+- Closing NEXUS could leave its process running without a window: the background sampler asked NEXUS's own window for its
+  title while the window thread waited for the sampler to stop, so each waited for the other.
+
 ## 0.9.0-alpha.2 (2026-10-29)
 
 Fixed

@@ -54,7 +54,7 @@ Five bugs were found and fixed (regex freeze/stack overflow, numeric UB, setting
 starvation, per-frame resource creation). On Windows 11 (2026-10-29, i5-14400F, `scripts\stress.ps1`,
 30 minutes, 300 churned processes, 10 replaced per second): no hang or crash; handles, GDI/USER objects
 and threads flat; between the 3rd and last decile private bytes went 206 → 213 MB and working set
-115 → 121 MB. A slow drift; every per-process cache checked is bounded, so watch it in the 8-hour soak.
+115 → 121 MB. The drift was a leak, found in a 6-hour soak and fixed (see docs/STRESS_TESTING.md).
 
 ## Continuous integration
 
@@ -99,7 +99,8 @@ Tested on an i5-14400F / RTX 5060 / Windows 11 Home 26200 PC, built natively wit
 - **Next** (also in docs/RELEASE_CHECKLIST.md): the tester's answers (below); click-test the
   2026-10-29 fixes; settings/integration (persistence, portable, start with Windows, tray, mini
   monitor, Task Manager replacement); installer (CI builds it: test the release's setup.exe,
-  including installing over a running NEXUS); DPI/light theme; the 8-hour soak.
+  including installing over a running NEXUS); DPI/light theme; repeat the soak with the leak and
+  deadlock fixes (overnight); publish alpha.3 with them (needs Jason's OK).
 - **Fixed 2026-10-29, not yet clicked through in the UI:** a bar under the process list explains
   the Network column's "—" without admin and offers Restart as administrator (× hides it,
   `processes.netHint`); changing a service start type, toggling an all-users startup app and the
@@ -131,6 +132,13 @@ Tested on an i5-14400F / RTX 5060 / Windows 11 Home 26200 PC, built natively wit
   3 s for NEXUS to close, then end it (not run yet: part of the installer test); a GitHub bug-report
   form; CHANGELOG.md, docs/RELEASE_CHECKLIST.md, and README, LIMITATIONS, STRESS_TESTING and
   USER_GUIDE brought up to date.
+- **6-hour soak (2026-10-29, 100 churned processes, 3 per second):** no crash or hang; handles,
+  GDI/USER objects and threads flat; private memory +10 MB an hour. Running each stress action
+  alone pinned it on opening and closing inspector windows (a Direct2D factory per window; now one
+  shared factory). The same runs hit a deadlock on closing: the sampler called GetWindowText on
+  NEXUS's own window while the UI thread joined the sampler (shown by NEXUS's own wait-chain
+  analysis); those titles are now read with a timeout. Both fixes were tested against the old
+  code; details in docs/STRESS_TESTING.md.
 
 ## Validation plan (next session on Windows 11)
 

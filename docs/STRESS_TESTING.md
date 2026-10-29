@@ -77,7 +77,20 @@ churned processes (10 replaced per second), full action mix: no crash or hang; 7
 max 92 ms); 3,196 snapshots (median 1.8 ms); CPU 22% of one core under forced redraws. Handles, GDI/USER objects and threads
 flat. Second-quarter vs last-quarter medians: private memory 197.9 → 204.2 MB (+3.1%), working set 110.7 → 113.9 MB
 (+2.9%). Per tenth of the run, private memory moves within 206–218 MB while the working set rises slowly (115 → 121 MB from
-the third tenth to the last). Every per-process cache is bounded; an 8-hour soak will show whether the drift levels off.
+the third tenth to the last). Every per-process cache is bounded; the soak below found the cause.
+
+6-hour soak, same day, 100 churned processes (3 replaced per second), full action mix: no crash or hang; 873,975 frames
+(p95 19.8 ms, max 107 ms); 38,388 snapshots (max 92 ms); handles, GDI/USER objects and threads flat. Private memory rose
+steadily by about 10 MB an hour (206 → 248 MB in the quietest samples of hours 1–2 and 5–6). Running each action type
+alone for 8 minutes (`NEXUS_STRESS_ONLY`) isolated it: opening and closing process inspector windows grew by 77 MB an
+hour, while every other action matched the idle baseline. Each window created a Direct2D factory of its own; with one
+shared factory, the same 8-minute test opened 79% more windows with half the CPU, peaked 50 MB lower and no longer grew.
+
+The isolation runs also hit a deadlock when NEXUS closes (2 of 15 runs left a process without a window). NEXUS's own
+wait-chain analysis showed the cycle: the sampler asked NEXUS's own window for its title (GetWindowText sends WM_GETTEXT
+to the UI thread) while the UI thread waited for the sampler to stop. Titles of NEXUS's own windows are now read with a
+timeout. A test that forces the situation deadlocks every time with the old code and finishes in about 0.25 s with the
+new one.
 
 ## Results under Wine
 

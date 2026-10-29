@@ -8,7 +8,10 @@ or a setup we do not have. Status details are in [PROGRESS.md](../PROGRESS.md).
 - [ ] A tester's "crashed my computer" report (Dell Latitude 7410): get his answers (whole PC or only NEXUS, shutdown
       dates) and have him try the build with the freeze fix *(tester)*
 - [x] Publish 0.9.0-alpha.2 with the freeze fix (2026-10-29) *(Claude)*
-- [ ] 8-hour soak test: does the slow memory drift seen in the 30-minute stress run level off? *(Claude, PC left alone)*
+- [x] Soak test (6 hours, 2026-10-29): found and fixed a leak when opening inspector windows and a deadlock when NEXUS
+      closes *(Claude)*
+- [ ] Repeat the soak with those fixes, ideally overnight *(Claude, PC left alone)*
+- [ ] Publish 0.9.0-alpha.3 with the two fixes *(Claude, after your OK)*
 - [x] Crash reports: a dump and a summary in `%LOCALAPPDATA%\NEXUS\Crashes`, mentioned at the next start *(Claude)*
 
 ## Testing on real Windows
