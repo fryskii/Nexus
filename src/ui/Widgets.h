@@ -75,6 +75,9 @@ public:
     void Panel(const Rect& r, Color tint, bool glow);
     void Tooltip(WidgetId id, const std::wstring& text);
     void Defer(std::function<void()> fn) { deferred_.push_back(std::move(fn)); }
+    // Draw another frame soon (windows redraw after running deferred actions), e.g. when state
+    // changed during drawing that the page only picks up at the start of a frame.
+    void RequestFrame() { Defer([] {}); }
     std::vector<std::function<void()>> TakeDeferred() { return std::move(deferred_); }
 
     // Key/value line helpers for info panels: returns next y.

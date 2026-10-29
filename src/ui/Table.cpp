@@ -165,6 +165,7 @@ void Table::DrawImpl(Ui& ui, const Rect& r, TableSource& src) {
             if (sortCol == ci) sortDesc = !sortDesc;
             else { sortCol = ci; sortDesc = c.align == Align::Right; } // numbers default to descending
             sortChanged = true;
+            ui.RequestFrame(); // pages re-sort before drawing, so show the new order now, not at the next sample
         }
         if (ui.RightClicked(hid) || ui.RightClicked(gid)) { headerMenu = true; headerMenuColumn = ci; }
         if (!c.tooltip.empty()) ui.Tooltip(hid, c.tooltip);
