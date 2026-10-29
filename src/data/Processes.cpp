@@ -321,8 +321,21 @@ void ProcessCollector::Finish(Snapshot& snap, uint32_t demandFlags) {
 namespace {
 struct EnumCtx {
     std::unordered_map<uint32_t, HWND> windows;
-    DWORD selfPid;
 };
+
+// A window's title without risking a deadlock. For windows of this process, GetWindowText sends
+// WM_GETTEXT to their thread: NEXUS's UI thread, which waits for this (sampler) thread while NEXUS
+// closes, so both waited forever. Those windows get the same message with a timeout instead; other
+// processes' titles are read without a message.
+int WindowTitle(HWND hwnd, wchar_t* buf, int cap) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != GetCurrentProcessId()) return GetWindowTextW(hwnd, buf, cap);
+    DWORD_PTR copied = 0;
+    if (!SendMessageTimeoutW(hwnd, WM_GETTEXT, static_cast<WPARAM>(cap), reinterpret_cast<LPARAM>(buf), SMTO_BLOCK | SMTO_ABORTIFHUNG, 200, &copied)) copied = 0;
+    if (cap > 0) buf[std::min<DWORD_PTR>(copied, static_cast<DWORD_PTR>(cap - 1))] = 0;
+    return static_cast<int>(copied);
+}
 
 BOOL CALLBACK EnumChildForCore(HWND child, LPARAM lp) {
     auto* pair = reinterpret_cast<std::pair<DWORD, DWORD>*>(lp);
@@ -337,11 +350,13 @@ BOOL CALLBACK EnumTop(HWND hwnd, LPARAM lp) {
     if (!IsWindowVisible(hwnd) || GetWindow(hwnd, GW_OWNER)) return TRUE;
     LONG_PTR ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
     if ((ex & WS_EX_TOOLWINDOW) && !(ex & WS_EX_APPWINDOW)) return TRUE;
-    if (GetWindowTextLengthW(hwnd) == 0) return TRUE;
-    BOOL cloaked = FALSE;
-    if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof cloaked)) && cloaked) return TRUE;
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
+    // Untitled windows are skipped. NEXUS's own windows all have a title and are not asked: that
+    // would send a message to the UI thread (see WindowTitle).
+    if (pid != GetCurrentProcessId() && GetWindowTextLengthW(hwnd) == 0) return TRUE;
+    BOOL cloaked = FALSE;
+    if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof cloaked)) && cloaked) return TRUE;
     // Packaged apps are hosted in ApplicationFrameHost; the real owner is the CoreWindow child.
     wchar_t cls[64];
     if (GetClassNameW(hwnd, cls, 64) && wcscmp(cls, L"ApplicationFrameWindow") == 0) {
@@ -356,7 +371,6 @@ BOOL CALLBACK EnumTop(HWND hwnd, LPARAM lp) {
 
 void ProcessCollector::ClassifyWindows(Snapshot& snap) {
     EnumCtx ctx;
-    ctx.selfPid = GetCurrentProcessId();
     EnumWindows(EnumTop, reinterpret_cast<LPARAM>(&ctx));
     for (auto& s : snap.procs) {
         auto it = ctx.windows.find(s.pid);
@@ -366,7 +380,7 @@ void ProcessCollector::ClassifyWindows(Snapshot& snap) {
         s.category = ProcCategory::App;
         s.mainWindow = it->second;
         wchar_t title[256];
-        int n = GetWindowTextW(it->second, title, 256);
+        int n = WindowTitle(it->second, title, 256);
         s.windowTitle = std::make_shared<const std::wstring>(title, n > 0 ? n : 0);
         if (s.status == ProcStatus::Running && IsHungAppWindow(it->second)) s.status = ProcStatus::NotResponding;
     }
