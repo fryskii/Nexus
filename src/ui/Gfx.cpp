@@ -41,6 +41,19 @@ uint32_t g_fontGen = 1;     // bumped when the families change so cached text fo
 ComPtr<IDWriteFontCollection> g_bundled; // private collection with the embedded Inter faces
 bool g_bundledTried = false;
 
+// One Direct2D factory for all of NEXUS's windows (they all draw on the UI thread). With a factory per
+// window, every inspector or mini-monitor window brought up Direct2D and Direct3D resources of its own,
+// and memory grew by a few KB with each window opened and closed (about 10 MB an hour in a 6-hour
+// stress run).
+const ComPtr<ID2D1Factory>& SharedFactory() {
+    static ComPtr<ID2D1Factory> factory;
+    if (!factory) {
+        D2D1_FACTORY_OPTIONS opts{};
+        D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory), &opts, factory.PutVoid());
+    }
+    return factory;
+}
+
 ComPtr<IDWriteFactory> SharedDWrite() {
     ComPtr<IDWriteFactory> f;
     DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(f.Put()));
@@ -132,8 +145,8 @@ bool Gfx::SetUiFont(const std::wstring& pref) {
 
 bool Gfx::Init(HWND hwnd) {
     hwnd_ = hwnd;
-    D2D1_FACTORY_OPTIONS opts{};
-    if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory), &opts, factory_.PutVoid()))) return false;
+    factory_ = SharedFactory();
+    if (!factory_) return false;
     if (FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(dwrite_.Put())))) return false;
     if (!g_fontsResolved) SetUiFont(L"inter");
     if (!HasFamily(dwrite_.Get(), monoFamily_.c_str())) monoFamily_ = HasFamily(dwrite_.Get(), L"Consolas") ? L"Consolas" : L"Courier New";
