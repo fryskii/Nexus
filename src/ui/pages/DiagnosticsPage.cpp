@@ -211,7 +211,7 @@ private:
             ui.Card({x, y, colW, h});
             g.Text(title, {x + 16, y + 10, colW - 32, 24}, Font::BodySemi, ui.t.text);
             float yy = y + 40;
-            for (auto& [k, v] : rows) { ui.KeyValue(x + 16, yy, 200, colW - 232, k, v); yy += 22; }
+            for (auto& [k, v] : rows) { ui.KeyValue(x + 16, yy, 250, colW - 282, k, v); yy += 22; }
             return h;
         };
         std::wstring ver = s.osName + L" " + s.displayVersion;

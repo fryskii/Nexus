@@ -232,10 +232,13 @@ private:
         }
         case W::System: {
             float y = body.y;
+            int lines = detailed_ ? 6 + app.Static().sysLoaded : 4;
+            float step = std::clamp((body.h - 4) / lines, 16.f, 21.f);
             auto line = [&](const std::wstring& k, const std::wstring& v) {
-                g.Text(k, {body.x, y, 110, 20}, Font::Small, t.textSecondary);
-                g.Text(v, {body.x + 110, y, body.w - 110, 20}, Font::Small, t.text);
-                y += 21;
+                if (y + step > body.B() + 2) return;
+                g.Text(k, {body.x, y, 110, step}, Font::Small, t.textSecondary);
+                g.Text(v, {body.x + 110, y, body.w - 110, step}, Font::Small, t.text);
+                y += step;
             };
             line(L"Uptime", FormatUptime(s.cpu.uptimeSec));
             line(L"Processes", FormatCount(s.cpu.processes));
@@ -293,8 +296,10 @@ private:
         }
         case W::Startup: {
             if (!startupLoaded_) { g.Text(L"Loading…", body, Font::Body, t.textSecondary); break; }
-            g.Text(std::to_wstring(startupEnabled_), {body.x, body.y, 80, 36}, Font::Display, t.accentText);
-            g.Text(L"of " + std::to_wstring(startupTotal_) + L" startup apps enabled", {body.x + 70, body.y + 10, body.w - 70, 22}, Font::Body, t.textSecondary);
+            std::wstring num = std::to_wstring(startupEnabled_);
+            float nw = g.Measure(num, Font::Display);
+            g.Text(num, {body.x, body.y, nw + 4, 36}, Font::Display, t.accentText);
+            g.Text(L"of " + std::to_wstring(startupTotal_) + L" startup apps enabled", {body.x + nw + 10, body.y + 4, body.w - nw - 10, 36}, Font::Body, t.textSecondary);
             if (detailed_)
                 g.Paragraph(L"Startup impact ratings require Windows boot traces that are not publicly accessible; NEXUS lists which startup apps are running and what they use now.",
                             {body.x, body.y + 46, body.w, body.h - 46}, Font::Small, t.textTertiary);

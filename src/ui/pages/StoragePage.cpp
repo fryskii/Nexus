@@ -67,14 +67,18 @@ public:
         g.PushClip(view);
         float y = view.y - scroll_;
         float colW = (view.w - 16) / 2;
+        int healthRows = 3;
+        if (h && h->available)
+            healthRows += (h->percentUsed >= 0) + (h->availableSpare >= 0) + (h->dataWrittenBytes != 0) + (h->powerOnHours != 0) + (h->unsafeShutdowns || h->mediaErrors);
+        float cardH = std::max(210.f, 44 + healthRows * 22.f + 14);
         // --- Identity card
-        Rect c1{view.x, y, colW, 210};
+        Rect c1{view.x, y, colW, cardH};
         ui.Card(c1);
         float cy = c1.y + 12;
         g.Text(d.model.empty() ? L"Unknown device" : d.model, {c1.x + 16, cy, c1.w - 32, 24}, Font::Subtitle, t.text);
         cy += 32;
-        auto kv = [&](Rect c, float& yy, const std::wstring& k, const std::wstring& v, Color vc = {}) {
-            ui.KeyValue(c.x + 16, yy, 150, c.w - 180, k, v, vc);
+        auto kv = [&](Rect c, float& yy, const std::wstring& k, const std::wstring& v, Color vc = Color::None()) {
+            ui.KeyValue(c.x + 16, yy, 220, c.w - 250, k, v, vc);
             yy += 22;
         };
         kv(c1, cy, L"Capacity", FormatBytes(d.size));
@@ -85,7 +89,7 @@ public:
         kv(c1, cy, L"Partition style", d.partitionStyle.empty() ? L"Requires administrator" : d.partitionStyle);
         kv(c1, cy, L"Role", std::wstring(d.isSystem ? L"System disk" : L"Data disk") + (d.hasPageFile ? L", page file" : L""));
         // --- Health card
-        Rect c2{view.x + colW + 16, y, colW, 210};
+        Rect c2{view.x + colW + 16, y, colW, cardH};
         ui.Card(c2);
         cy = c2.y + 12;
         g.Text(L"Health", {c2.x + 16, cy, 200, 24}, Font::Subtitle, t.text);
