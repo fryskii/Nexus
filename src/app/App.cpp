@@ -861,7 +861,8 @@ void App::EnsureEventCounts() {
     events.loading = true;
     auto out = std::make_shared<std::array<int, 4>>();
     auto shutdowns = std::make_shared<std::vector<std::wstring>>();
-    worker::Run([out, shutdowns] {
+    // On a thread of its own: event-log queries can take many seconds on a busy disk.
+    worker::RunLong([out, shutdowns] {
         const wchar_t* kernelPower41 = L"*[System[Provider[@Name='Microsoft-Windows-Kernel-Power'] and EventID=41 and TimeCreated[timediff(@SystemTime) <= 2592000000]]]";
         (*out)[0] = CountEvents(L"Application", L"*[System[(EventID=1000 or EventID=1002) and TimeCreated[timediff(@SystemTime) <= 86400000]]]", 500);
         (*out)[1] = CountEvents(L"System", kernelPower41, 500);

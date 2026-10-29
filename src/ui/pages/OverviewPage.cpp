@@ -75,7 +75,6 @@ public:
         float y = r.y - scroll_;
         int col = 0;
         float rowH = 0;
-        int index = 0;
         for (size_t i = 0; i < widgets_.size(); ++i) {
             Widget& w = widgets_[i];
             int span = std::min(w.span, cols);
@@ -85,7 +84,6 @@ public:
             if (wr.B() > r.y && wr.y < r.B()) DrawWidget(ui, wr, w, *snap, static_cast<int>(i));
             rowH = std::max(rowH, h);
             col += span;
-            ++index;
         }
         y += rowH + gap;
         g.PopClip();

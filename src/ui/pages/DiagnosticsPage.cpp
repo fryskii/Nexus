@@ -315,7 +315,8 @@ private:
         if (eventsLoaded_ || loadingEvents_) return;
         loadingEvents_ = true;
         auto out = std::make_shared<std::vector<EventEntry>>();
-        worker::Run([out] {
+        // On a thread of its own: event-log queries can take many seconds on a busy disk.
+        worker::RunLong([out] {
             const wchar_t* q = L"*[System[(Level=1 or Level=2 or Level=3) and TimeCreated[timediff(@SystemTime) <= 604800000]]]";
             *out = QueryEvents(L"System", q, 200, true);
             auto a = QueryEvents(L"Application", q, 150, true);
@@ -345,7 +346,8 @@ private:
         if (crashesLoaded_ || loadingCrashes_) return;
         loadingCrashes_ = true;
         auto out = std::make_shared<std::vector<EventEntry>>();
-        worker::Run([out] {
+        // On a thread of its own, like LoadEvents.
+        worker::RunLong([out] {
             *out = QueryEvents(L"Application", L"*[System[(EventID=1000 or EventID=1002) and TimeCreated[timediff(@SystemTime) <= 2592000000]]]", 300, false);
             auto bc = QueryEvents(L"System", L"*[System[Provider[@Name='Microsoft-Windows-WER-SystemErrorReporting'] and EventID=1001]]", 50, true);
             out->insert(out->end(), bc.begin(), bc.end());
