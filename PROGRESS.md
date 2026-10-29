@@ -82,9 +82,15 @@ Tested on an i5-14400F / RTX 5060 / Windows 11 Home 26200 PC, built natively wit
 - **Smoke-test parts 1–3 done** (ticked below), with fixes for: widget-ID collisions, insights cards,
   invisible text colours, layout overlaps, frame pacing, slow re-sort, the hidden elevated-helper
   confirmation, worker starvation, boxed/fitted headers and horizontal table scrolling.
-- **Next:** part 4, process actions on a test app (efficiency mode, priority, affinity,
-  suspend/resume, dumps, wait chain); then settings/integration (persistence, portable, start with
-  Windows, tray, mini monitor, Task Manager replacement); installer (needs NSIS); DPI/light theme.
+- **Part 4 started 2026-10-28, then paused for an early preview release** (v0.9.0-alpha.1, a
+  GitHub pre-release built by CI from a `v*` tag; notes in docs/RELEASE_NOTES.md). Checked on a
+  copy of PING.EXE run from %TEMP% (System32 binaries count as Windows processes, which are refused
+  Efficiency mode by design), each result confirmed outside NEXUS: efficiency mode on (EcoQoS +
+  Idle) and off (EcoQoS explicitly off, Normal), Below normal priority, affinity to CPUs 0-1,
+  suspend (all threads suspended) and resume.
+- **Next:** finish part 4 (full dump and minidump, wait chain on a suspended process); then
+  settings/integration (persistence, portable, start with Windows, tray, mini monitor, Task Manager
+  replacement); installer (needs NSIS); DPI/light theme.
 - **Ideas noted:** without admin the Network column only shows "—" (reason in its tooltip); a
   visible "run as administrator" hint would help. Changing a service start type and toggling
   startup apps still wait for the elevated helper on the UI thread (window freezes until answered).
@@ -104,7 +110,7 @@ Tested on an i5-14400F / RTX 5060 / Windows 11 Home 26200 PC, built natively wit
 
 - [x] Processes: grouping (apps own their child processes), tree, flat, search terms, sort, column chooser, header totals, heat map
 - [x] End task / tree on a test app; refusal for csrss.exe (access-denied → restart-as-admin offer not yet seen)
-- [ ] Efficiency mode on/off (leaf status, Task Manager agrees); priority; affinity; suspend/resume; full dump and minidump; wait chain
+- [ ] Efficiency mode on/off ✓ (leaf status ✓); priority ✓; affinity ✓; suspend/resume ✓; full dump and minidump; wait chain
 - [x] Performance: CPU % matches Task Manager (±2%), speed, logical-processor graphs, memory composition, disks, adapters, GPU engines and temperature
 - [x] Details: all columns populated; sort by every column
 - [x] Services: start/stop/restart (non-elevated → UAC helper), start-type change

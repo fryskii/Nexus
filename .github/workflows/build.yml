@@ -88,3 +88,23 @@ jobs:
           ./tests_asan
       - name: Fuzz (5 min)
         run: tests/fuzz/run.sh "$RUNNER_TEMP/fuzz" 300
+  # Pushing a tag such as v0.9.0-alpha.1 publishes the cross-built installer and zip as a GitHub
+  # pre-release, once every other job has passed.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [msvc, mingw-cross, core-linux]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: NEXUS-dist
+          path: dist
+      - name: Publish pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --prerelease --title "NEXUS $GITHUB_REF_NAME" \
+            --notes-file docs/RELEASE_NOTES.md dist/*.zip dist/*-setup-x64.exe dist/SHA256SUMS.txt
