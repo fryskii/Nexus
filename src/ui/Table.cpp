@@ -67,32 +67,105 @@ bool Table::OnKey(UINT vk, TableSource& src) {
     return true;
 }
 
-static float MinWidth(const TableColumn& c) { return c.icon != MetricIcon::None ? 84.f : 64.f; }
+bool Table::HasPills() const {
+    return std::any_of(columns.begin(), columns.end(), [](const TableColumn& c) { return c.visible && c.icon != MetricIcon::None && !c.header2.empty(); });
+}
+
+// Narrowest width at which the header title still fits in the smaller header font: on one line, or
+// in the tall (pill) header on two lines split at the best space. Plus box inset, text padding and,
+// for the sorted column, the arrow.
+float Table::MinWidth(Gfx& g, const TableColumn& c, bool sorted, bool tall) {
+    if (c.icon != MetricIcon::None) return 84.f;
+    auto it = titleMinW_.find(c.title);
+    if (it == titleMinW_.end()) {
+        float one = g.Measure(c.title, Font::Caption), two = one;
+        for (size_t sp = c.title.find(L' '); sp != std::wstring::npos; sp = c.title.find(L' ', sp + 1))
+            two = std::min(two, std::max(g.Measure(c.title.substr(0, sp), Font::Caption), g.Measure(c.title.substr(sp + 1), Font::Caption)));
+        it = titleMinW_.emplace(c.title, std::make_pair(one, two)).first;
+    }
+    float text = tall ? it->second.second : it->second.first;
+    return std::max(40.f, std::ceil(text) + 6 + 12 + (sorted ? 12 : 0) + 1);
+}
+
+void Table::HeaderTitle(Gfx& g, const Theme& t, int ci, const Rect& r, bool sorted, bool tall) {
+    const TableColumn& c = columns[ci];
+    if (headerFit_.size() != columns.size()) headerFit_.assign(columns.size(), {});
+    HeaderFit& fit = headerFit_[ci];
+    if (fit.w != r.w || fit.sorted != sorted || fit.tall != tall || fit.title != c.title) {
+        // Largest font that fits on one line; otherwise (tall header) two lines split at the space
+        // that balances them best; otherwise the small font, cut off.
+        fit = {c.title, {c.title, L""}, r.w, 0, sorted, tall, Font::Caption};
+        for (Font cand : {sorted ? Font::SmallSemi : Font::Small, Font::Caption}) {
+            float one = g.Measure(c.title, cand);
+            if (one <= r.w) { fit.font = cand; fit.textW = one; break; }
+            if (!tall) continue;
+            float best = 1e9f;
+            for (size_t sp = c.title.find(L' '); sp != std::wstring::npos; sp = c.title.find(L' ', sp + 1)) {
+                std::wstring a = c.title.substr(0, sp), b = c.title.substr(sp + 1);
+                float w = std::max(g.Measure(a, cand), g.Measure(b, cand));
+                if (w <= r.w && w < best) { best = w; fit.lines[0] = a; fit.lines[1] = b; }
+            }
+            if (best < 1e9f) { fit.font = cand; fit.textW = best; break; }
+        }
+        if (fit.textW == 0) fit.textW = r.w; // nothing fits: cut off in the small font
+    }
+    Color col = sorted ? t.text : t.textSecondary;
+    if (fit.lines[1].empty()) {
+        g.Text(fit.lines[0], r, fit.font, col, c.align);
+    } else {
+        float lh = fit.font == Font::Caption ? 14.f : 15.f;
+        float y = r.y + (r.h - 2 * lh) / 2;
+        for (auto& l : fit.lines) {
+            g.Text(l, {r.x, y, r.w, lh}, fit.font, col, c.align);
+            y += lh;
+        }
+    }
+    if (sorted)
+        g.Chevron(c.align == Align::Right ? r.x - 2 : std::min(r.R() + 2, r.x + fit.textW + 10), r.y + r.h / 2, 7.f, true, t.textTertiary, 1.2f);
+}
 
 void Table::Draw(Ui& ui, const Rect& r, TableSource& src) {
     EnsureOrder();
+    bool tall = HasPills();
+    auto soft = [&](int ci) { return MinWidth(ui.g, columns[ci], ci == sortCol, tall); };
+    // Keep every header title readable at the saved width.
+    for (size_t i = 0; i < columns.size(); ++i)
+        if (columns[i].visible) columns[i].width = std::max(columns[i].width, soft(static_cast<int>(i)));
     if (!fillFirst) { DrawImpl(ui, r, src); return; }
     // When the panel is too narrow, squeeze the other columns for this frame only so the saved
     // widths survive a temporary resize. A width changed by the user during the frame is kept.
+    // First down to where both the title and typical values fit (64 px keeps values such as PIDs
+    // readable), then (too many columns for the window) wide titles give way down to 64 px, and as
+    // a last resort everything shrinks further, so no column is pushed out of view.
     int firstCol = -1;
-    float others = 0, shrinkable = 0;
+    float others = 0;
     for (int ci : order_) {
         if (!columns[ci].visible) continue;
         if (firstCol < 0) { firstCol = ci; continue; }
         others += columns[ci].width;
-        shrinkable += std::max(0.f, columns[ci].width - MinWidth(columns[ci]));
     }
     float excess = others - (r.w - 16.f - 4.f - 160.f);
-    if (firstCol < 0 || excess <= 0 || shrinkable <= 0) { DrawImpl(ui, r, src); return; }
-    float k = std::min(1.f, excess / shrinkable);
+    if (firstCol < 0 || excess <= 0) { DrawImpl(ui, r, src); return; }
     std::vector<std::pair<float, float>> saved(columns.size()); // original, squeezed
-    for (size_t i = 0; i < columns.size(); ++i) {
-        auto& c = columns[i];
-        saved[i] = {c.width, c.width};
-        if (!c.visible || static_cast<int>(i) == firstCol) continue;
-        c.width -= std::max(0.f, c.width - MinWidth(c)) * k;
-        saved[i].second = c.width;
-    }
+    for (size_t i = 0; i < columns.size(); ++i) saved[i] = {columns[i].width, columns[i].width};
+    auto squeeze = [&](auto floorOf) {
+        float shrinkable = 0;
+        for (int ci : order_)
+            if (columns[ci].visible && ci != firstCol) shrinkable += std::max(0.f, columns[ci].width - floorOf(ci));
+        if (excess <= 0 || shrinkable <= 0) return;
+        float k = std::min(1.f, excess / shrinkable);
+        for (int ci : order_) {
+            if (!columns[ci].visible || ci == firstCol) continue;
+            float cut = std::max(0.f, columns[ci].width - floorOf(ci)) * k;
+            columns[ci].width -= cut;
+            excess -= cut;
+        }
+    };
+    auto plainFloor = [&](int ci, float plain) { return columns[ci].icon != MetricIcon::None ? 84.f : plain; };
+    squeeze([&](int ci) { return std::max(soft(ci), plainFloor(ci, 64.f)); });
+    squeeze([&](int ci) { return plainFloor(ci, 64.f); });
+    squeeze([&](int ci) { return plainFloor(ci, 40.f); });
+    for (size_t i = 0; i < columns.size(); ++i) saved[i].second = columns[i].width;
     DrawImpl(ui, r, src);
     for (size_t i = 0; i < columns.size(); ++i)
         if (static_cast<int>(i) != firstCol && columns[i].width == saved[i].second) columns[i].width = saved[i].first;
@@ -101,7 +174,7 @@ void Table::Draw(Ui& ui, const Rect& r, TableSource& src) {
 void Table::DrawImpl(Ui& ui, const Rect& r, TableSource& src) {
     Gfx& g = ui.g;
     const Theme& t = ui.t;
-    bool pills = std::any_of(columns.begin(), columns.end(), [](const TableColumn& c) { return c.visible && c.icon != MetricIcon::None && !c.header2.empty(); });
+    bool pills = HasPills();
     const float headerH = columns.empty() ? 0 : (pills ? 66.f : 36.f);
     const float gap = 8.f;
     const float rowH = RowHeight();
@@ -155,11 +228,17 @@ void Table::DrawImpl(Ui& ui, const Rect& r, TableSource& src) {
             g.Text(c.title, {tx, vr.B() - 2, vr.w, pr.h * 0.40f}, sorted ? Font::SmallSemi : Font::Caption, sorted ? t.text : t.textSecondary,
                    showTile ? Align::Center : Align::Right);
         } else {
-            Rect tr{cr.x + 8, pills ? cr.B() - 30 : cr.y, cr.w - 16, pills ? 26.f : cr.h};
-            if (hot && !gripHot) g.FillRound({cr.x + 2, tr.y + 2, cr.w - 4, tr.h - 4}, 6.f, t.surfaceHover);
-            g.Text(c.title, tr, sorted ? Font::SmallSemi : Font::Small, sorted ? t.text : t.textSecondary, c.align);
-            if (sorted) g.Chevron(c.align == Align::Right ? tr.x + 4 : std::min(tr.R() - 6, tr.x + g.Measure(c.title, Font::SmallSemi) + 10), tr.y + tr.h / 2, 7.f,
-                                  true, t.textTertiary, 1.2f);
+            // Plain column: the same panel as the metric pills, with the title only.
+            float inset = pills ? 7.f : 4.f, rad = pills ? 12.f : 8.f;
+            Rect pr{cr.x + 3, cr.y + inset, cr.w - 6, cr.h - 2 * inset};
+            g.FillGradient(pr, rad, t.surfaceAlt.Mix(t.accent, t.dark ? 0.06f : 0.02f), t.surface);
+            g.StrokeRound(pr, rad, sorted ? t.accent.Alpha(0.75f) : hot && !gripHot ? t.accent.Alpha(0.5f) : t.panelBorder);
+            Rect tr{pr.x + 6, pr.y, pr.w - 12, pr.h};
+            if (sorted) { // room for the chevron
+                tr.w -= 12;
+                if (c.align == Align::Right) tr.x += 12;
+            }
+            HeaderTitle(g, t, ci, tr, sorted, pills);
         }
         if (ui.Clicked(hid) && std::fabs(ui.in.mx - dragStartX_) < 4) {
             if (sortCol == ci) sortDesc = !sortDesc;
@@ -174,7 +253,7 @@ void Table::DrawImpl(Ui& ui, const Rect& r, TableSource& src) {
     }
     // Column resize / reorder dragging.
     if (resizing_ >= 0) {
-        if (ui.in.lDown) columns[resizing_].width = std::max(36.f, resizeStartW_ + (ui.in.mx - resizeStartX_));
+        if (ui.in.lDown) columns[resizing_].width = std::max(MinWidth(g, columns[resizing_], resizing_ == sortCol, pills), resizeStartW_ + (ui.in.mx - resizeStartX_));
         else resizing_ = -1;
     }
     if (dragging_ >= 0) {

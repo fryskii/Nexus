@@ -6,6 +6,7 @@
 #include <d2d1.h>
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace nx {
@@ -76,6 +77,16 @@ public:
 
 private:
     void DrawImpl(Ui& ui, const Rect& r, TableSource& src);
+    bool HasPills() const;
+    float MinWidth(Gfx& g, const TableColumn& c, bool sorted, bool tall); // narrowest width at which the header title still fits
+    void HeaderTitle(Gfx& g, const Theme& t, int ci, const Rect& r, bool sorted, bool tall);
+    struct HeaderFit { // how a header title is laid out, recomputed when its inputs change
+        std::wstring title, lines[2];
+        float w = -1, textW = 0;
+        bool sorted = false, tall = false;
+        Font font = Font::Caption;
+    };
+    std::vector<HeaderFit> headerFit_;
     WidgetId id_;
     float viewH_ = 0;
     bool ensureVisible_ = false;
@@ -83,6 +94,7 @@ private:
     float resizeStartX_ = 0, resizeStartW_ = 0, dragStartX_ = 0, sbDragY_ = 0, sbDragOff_ = 0;
     mutable std::wstring cell_;
     std::vector<int> order_; // display order -> column index
+    std::unordered_map<std::wstring, std::pair<float, float>> titleMinW_; // title width on one line / two lines (Caption)
     void EnsureOrder();
 };
 
