@@ -10,6 +10,14 @@
 #include <tlhelp32.h>
 #include <psapi.h>
 #include <sddl.h>
+#include <wct.h>
+
+#ifndef WCT_MAX_NODE_COUNT
+#define WCT_MAX_NODE_COUNT 16
+#endif
+#ifndef WCTP_GETINFO_ALL_FLAGS
+#define WCTP_GETINFO_ALL_FLAGS 0x7 // WCT_OUT_OF_PROC_FLAG | WCT_OUT_OF_PROC_COM_FLAG | WCT_OUT_OF_PROC_CS_FLAG
+#endif
 
 #include <algorithm>
 #include <cstddef>
@@ -249,6 +257,71 @@ std::vector<ThreadInfo> QueryThreads(uint32_t pid) {
         if (!p->NextEntryOffset) break;
         off += p->NextEntryOffset;
     }
+    return out;
+}
+
+// ------------------------------------------------------------------------------------------
+// Wait chains
+// ------------------------------------------------------------------------------------------
+namespace {
+// File name of a process's executable, or empty when the process cannot be opened.
+std::wstring ProcessFileName(uint32_t pid) {
+    Handle h(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid));
+    wchar_t path[1024];
+    DWORD len = 1024;
+    return h && QueryFullProcessImageNameW(h.Get(), 0, path, &len) ? FileNameOf(std::wstring(path, len)) : std::wstring();
+}
+} // namespace
+
+std::wstring DescribeWaitChains(uint32_t pid) {
+    HWCT session = OpenThreadWaitChainSession(0, nullptr);
+    if (!session) return L"Wait chain analysis is unavailable: " + LastErrorMessage();
+    auto threads = QueryThreads(pid);
+    std::wstring out;
+    int blocked = 0, deadlocked = 0, behindDeadlock = 0;
+    for (auto& t : threads) {
+        WAITCHAIN_NODE_INFO nodes[WCT_MAX_NODE_COUNT];
+        DWORD count = WCT_MAX_NODE_COUNT;
+        BOOL cycle = FALSE;
+        if (!GetThreadWaitChain(session, 0, WCTP_GETINFO_ALL_FLAGS, t.tid, &count, nodes, &cycle) || count < 2) continue;
+        ++blocked;
+        // `cycle` is set when the chain ends in a cycle anywhere: the thread is part of the deadlock
+        // only if the chain comes back to it; otherwise it waits on threads that are.
+        bool inCycle = false;
+        for (DWORD i = 1; i < count; ++i)
+            if (nodes[i].ObjectType == WctThreadType && nodes[i].ThreadObject.ThreadId == t.tid) inCycle = true;
+        if (cycle && inCycle) ++deadlocked;
+        else if (cycle) ++behindDeadlock;
+        std::wstring line = L"Thread " + std::to_wstring(t.tid);
+        for (DWORD i = 1; i < count && i < 8; ++i) {
+            auto& n = nodes[i];
+            if (n.ObjectType == WctThreadType && n.ThreadObject.ThreadId == 0) { // the process that a process wait is for
+                std::wstring exe = ProcessFileName(n.ThreadObject.ProcessId);
+                line += L" \u2192 " + (exe.empty() ? std::wstring(L"process") : exe) + L" (PID " + std::to_wstring(n.ThreadObject.ProcessId) + L")";
+            } else if (n.ObjectType == WctThreadType)
+                line += L" \u2192 thread " + std::to_wstring(n.ThreadObject.ThreadId) + L" (PID " + std::to_wstring(n.ThreadObject.ProcessId) + L")";
+            else {
+                static const wchar_t* types[] = {L"", L"critical section", L"SendMessage", L"mutex", L"ALPC", L"COM", L"thread wait", L"process wait",
+                                                 L"thread", L"COM activation", L"unknown", L"socket", L"SMB I/O"};
+                int ty = static_cast<int>(n.ObjectType);
+                line += std::wstring(L" \u2192 ") + (ty >= 0 && ty < 13 ? types[ty] : L"object");
+                if (n.LockObject.ObjectName[0]) line += std::wstring(L" '") + n.LockObject.ObjectName + L"'";
+            }
+        }
+        if (cycle) line += inCycle ? L"  [DEADLOCK]" : L"  [waits on a deadlock]";
+        out += line + L"\n";
+        if (out.size() > 6000) { out += L"\u2026"; break; }
+    }
+    CloseThreadWaitChainSession(session);
+    if (!blocked) out = L"No thread is waiting on another thread, process or lock. The process is not blocked by a wait chain.";
+    else
+        out = std::to_wstring(blocked) + L" blocked thread(s)" + (deadlocked ? L", " + std::to_wstring(deadlocked) + L" in a deadlock cycle" : L"") +
+              (behindDeadlock ? L", " + std::to_wstring(behindDeadlock) + L" waiting on a deadlocked thread" : L"") + L":\n\n" + out;
+    // Suspension is not a wait chain, but it is why a suspended process looks stuck.
+    size_t suspended = static_cast<size_t>(
+        std::count_if(threads.begin(), threads.end(), [](const ThreadInfo& th) { return th.state == 5 /*Waiting*/ && th.waitReason == 5 /*Suspended*/; }));
+    if (suspended && suspended == threads.size()) out = L"The process is suspended: its threads are frozen until it is resumed.\n\n" + out;
+    else if (suspended) out = std::to_wstring(suspended) + L" of " + std::to_wstring(threads.size()) + L" threads are suspended.\n\n" + out;
     return out;
 }
 

@@ -13,14 +13,6 @@
 #include <shellapi.h>
 #include <shlobj.h>
 #include <shlwapi.h>
-#include <wct.h>
-
-#ifndef WCT_MAX_NODE_COUNT
-#define WCT_MAX_NODE_COUNT 16
-#endif
-#ifndef WCTP_GETINFO_ALL_FLAGS
-#define WCTP_GETINFO_ALL_FLAGS 0x7 // WCT_OUT_OF_PROC_FLAG | WCT_OUT_OF_PROC_COM_FLAG | WCT_OUT_OF_PROC_CS_FLAG
-#endif
 
 #include <algorithm>
 
@@ -498,43 +490,12 @@ void RestartExplorer(App& app, const ProcSample& p) {
     app.ShowStatus(L"Windows Explorer restarted");
 }
 
-// Wait Chain Traversal (documented in wct.h): shows which threads are blocked and on what.
+// Wait Chain Traversal: shows which threads are blocked and on what.
 void AnalyzeWaitChain(App& app, const ProcSample& p) {
     uint32_t pid = p.pid;
     std::wstring name = p.Name();
     auto out = std::make_shared<std::wstring>();
-    worker::Run([pid, out] {
-        HWCT session = OpenThreadWaitChainSession(0, nullptr);
-        if (!session) { *out = L"Wait chain analysis is unavailable: " + LastErrorMessage(); return; }
-        int blocked = 0, deadlocks = 0;
-        for (auto& t : QueryThreads(pid)) {
-            WAITCHAIN_NODE_INFO nodes[WCT_MAX_NODE_COUNT];
-            DWORD count = WCT_MAX_NODE_COUNT;
-            BOOL cycle = FALSE;
-            if (!GetThreadWaitChain(session, 0, WCTP_GETINFO_ALL_FLAGS, t.tid, &count, nodes, &cycle) || count < 2) continue;
-            ++blocked;
-            if (cycle) ++deadlocks;
-            std::wstring line = L"Thread " + std::to_wstring(t.tid);
-            for (DWORD i = 1; i < count && i < 8; ++i) {
-                auto& n = nodes[i];
-                if (n.ObjectType == WctThreadType)
-                    line += L" \u2192 thread " + std::to_wstring(n.ThreadObject.ThreadId) + L" (PID " + std::to_wstring(n.ThreadObject.ProcessId) + L")";
-                else {
-                    static const wchar_t* types[] = {L"", L"critical section", L"SendMessage", L"mutex", L"ALPC", L"COM", L"thread wait", L"process wait",
-                                                     L"thread", L"COM activation", L"unknown", L"socket", L"SMB I/O"};
-                    int ty = static_cast<int>(n.ObjectType);
-                    line += std::wstring(L" \u2192 ") + (ty >= 0 && ty < 13 ? types[ty] : L"object");
-                    if (n.LockObject.ObjectName[0]) line += std::wstring(L" '") + n.LockObject.ObjectName + L"'";
-                }
-            }
-            if (cycle) line += L"  [DEADLOCK]";
-            *out += line + L"\n";
-            if (out->size() > 6000) { *out += L"\u2026"; break; }
-        }
-        CloseThreadWaitChainSession(session);
-        if (!blocked) *out = L"No thread is waiting on another thread, process or lock. The process is not blocked by a wait chain.";
-        else *out = std::to_wstring(blocked) + L" blocked thread(s)" + (deadlocks ? L", " + std::to_wstring(deadlocks) + L" in a deadlock cycle" : L"") + L":\n\n" + *out;
-    }, [&app, name, out] { app.Info(L"Wait chain for " + name, *out); });
+    worker::Run([pid, out] { *out = DescribeWaitChains(pid); }, [&app, name, out] { app.Info(L"Wait chain for " + name, *out); });
 }
 
 void ProcessContextMenu(App& app, const ProcSample& pIn, bool detailsView) {

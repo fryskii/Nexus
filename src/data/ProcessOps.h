@@ -81,6 +81,9 @@ std::vector<HandleInfo> QueryHandles(uint32_t pid, std::wstring& error);
 TokenDetails QueryToken(uint32_t pid, std::wstring& error);
 std::vector<std::pair<std::wstring, std::wstring>> QueryEnvironment(uint32_t pid, std::wstring& error);
 ProcessGeneral QueryGeneral(uint32_t pid, const ProcMeta* meta);
+// Wait Chain Traversal (documented in wct.h): which threads of the process are blocked, on what and
+// whether in a deadlock, as a report for the user. Also notes suspended threads.
+std::wstring DescribeWaitChains(uint32_t pid);
 
 // ---------------- Actions ----------------
 // All actions return ERROR_SUCCESS or a Win32 error code; `why` receives a user-facing explanation.
