@@ -18,7 +18,11 @@ inline constexpr WidgetId Id(const char* s, uint64_t salt = 0) {
     while (*s) { h ^= static_cast<uint8_t>(*s++); h *= 1099511628211ULL; }
     return h ? h : 1;
 }
-inline WidgetId IdMix(WidgetId a, uint64_t b) { return (a ^ (b + 0x9E3779B97F4A7C15ULL + (a << 6) + (a >> 2))) | 1; }
+// Distinct b values give distinct ids (forcing bit 0 instead would merge neighbours such as 4 and 5).
+inline WidgetId IdMix(WidgetId a, uint64_t b) {
+    WidgetId h = a ^ (b + 0x9E3779B97F4A7C15ULL + (a << 6) + (a >> 2));
+    return h ? h : 1;
+}
 
 struct InputState {
     float mx = -1, my = -1;
