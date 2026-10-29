@@ -397,6 +397,17 @@ static void TestDiagnostics() {
     CHECK(satSeen);
     CHECK(memCrit);
     CHECK(EvaluateDiagnostics(DiagInput{}).empty());
+
+    // Unexpected shutdowns say when they happened, so they are not mistaken for something just now.
+    DiagInput sd;
+    sd.unexpectedShutdowns30d = 3;
+    sd.unexpectedShutdownTimes = {L"2026-10-27 21:45:10", L"2026-10-12 09:10:00", L"2026-10-03 14:22:31"};
+    auto a3 = EvaluateDiagnostics(sd);
+    CHECK(a3.size() == 1 && a3[0].evidence.size() == 2);
+    CHECK(a3.size() == 1 && a3[0].evidence.back() == L"When: 2026-10-27 21:45:10, 2026-10-12 09:10:00, 2026-10-03 14:22:31");
+    sd.unexpectedShutdowns30d = 12; // more than the times listed
+    a3 = EvaluateDiagnostics(sd);
+    CHECK(a3.size() == 1 && a3[0].evidence.back().rfind(L"Most recent: 2026-10-27 21:45:10", 0) == 0);
 }
 
 int main() {

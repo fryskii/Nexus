@@ -106,7 +106,11 @@ public:
     // ---- services for pages ----
     HWND Hwnd() const { return hwnd_; }
     Settings& Config() { return settings_; }
+    // Writes the settings now (closing, restarting, Windows shutting down), after any background save.
     void SaveSettings();
+    // Atomic write for pages' files: during the 60-second save it is done in the background with the
+    // settings; otherwise now.
+    void SaveFileAtomic(const std::wstring& path, std::string data);
     const Theme& Th() const { return theme_; }
     Gfx& G() { return gfx_; }
     IconCache& Icons() { return icons_; }
@@ -125,7 +129,11 @@ public:
     void EnsureGpuInfo();
     void EnsureDiskInfo(bool withHealth);
     void EnsureNicInfo(bool force = false);
-    struct EventCounts { int crashes24h = -1, kernelPower30d = -1, whea30d = -1, errors24h = -1; bool loading = false, loaded = false; } events;
+    struct EventCounts {
+        int crashes24h = -1, kernelPower30d = -1, whea30d = -1, errors24h = -1;
+        std::vector<std::wstring> kernelPowerTimes; // local times of the most recent Kernel-Power 41 events
+        bool loading = false, loaded = false;
+    } events;
     void EnsureEventCounts();
 
     void Navigate(PageId id);
@@ -209,6 +217,7 @@ private:
     void ApplyMica();
     void RestoreWindowPlacement(int& nCmdShow);
     void SaveWindowPlacement();
+    void SaveInBackground();
     void RunDeferred();
 
     HWND hwnd_ = nullptr, search_ = nullptr;
@@ -242,6 +251,8 @@ private:
     std::unique_ptr<Tray> tray_;
     std::unique_ptr<MiniMonitor> mini_;
     HistoryRecorder recorder_;
+    std::vector<std::pair<std::wstring, std::string>>* deferredWrites_ = nullptr; // set during SaveInBackground
+    bool saving_ = false;                                                            // a background save is writing
     std::vector<std::function<void()>> deferred_;
     float navScroll_ = 0;
     // Custom title bar state (DIPs, set while painting).

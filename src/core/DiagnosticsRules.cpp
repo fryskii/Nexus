@@ -273,7 +273,14 @@ std::vector<DiagAlert> EvaluateDiagnostics(const DiagInput& in) {
         a.category = L"Stability";
         a.title = L"Unexpected shutdowns recorded";
         a.evidence.push_back(std::to_wstring(in.unexpectedShutdowns30d) + L" Kernel-Power event 41 entries in the last 30 days");
-        a.reasoning = L"Event 41 means Windows restarted without a clean shutdown (power loss, hard reset, hang or bugcheck). The event alone does not identify the cause.";
+        if (!in.unexpectedShutdownTimes.empty()) {
+            std::wstring when;
+            for (auto& t : in.unexpectedShutdownTimes) when += (when.empty() ? L"" : L", ") + t;
+            bool all = in.unexpectedShutdownTimes.size() >= static_cast<size_t>(in.unexpectedShutdowns30d);
+            a.evidence.push_back((all ? L"When: " : L"Most recent: ") + when);
+        }
+        a.reasoning = L"Event 41 means Windows restarted without a clean shutdown (power loss, hard reset, hang or bugcheck). The event alone does not identify the "
+                      L"cause. NEXUS only reports what Windows recorded.";
         a.suggestion = L"Correlate with bugcheck (1001) entries and power events in the event list.";
         out.push_back(std::move(a));
     }

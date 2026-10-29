@@ -131,12 +131,55 @@ void App::LoadSettings() {
 
 void App::SaveSettings() {
     if (stress_) return; // stress runs change settings at random; never persist them
+    std::lock_guard<std::recursive_mutex> l(DiskWriteLock()); // a background save still writing finishes first
     for (auto& p : pages_)
         if (p) p->SaveState();
     SaveWindowPlacement();
     if (!settings_.Dirty()) return;
     std::wstring err;
     if (WriteFileAtomic(configPath_, settings_.Serialize(), err)) settings_.ClearDirty();
+}
+
+// The 60-second save. The files are prepared here and written on a thread of their own: on a
+// saturated disk a write and the flush that makes it durable can take many seconds, and the window
+// must not wait for them (a tester's laptop showed "Not Responding" a minute after every start).
+void App::SaveInBackground() {
+    if (saving_) return; // the previous save is still being written; try again next time
+    auto writes = std::make_shared<std::vector<std::pair<std::wstring, std::string>>>();
+    auto settings = std::make_shared<std::string>();
+    if (!stress_) { // stress runs change settings at random; never persist them
+        deferredWrites_ = writes.get();
+        for (auto& p : pages_)
+            if (p) p->SaveState();
+        SaveWindowPlacement();
+        deferredWrites_ = nullptr;
+        if (settings_.Dirty()) *settings = settings_.Serialize();
+    }
+    auto history = std::make_shared<HistoryRecorder::Chunk>(recorder_.TakePending());
+    if (settings->empty() && writes->empty() && history->data.empty()) return;
+    saving_ = true;
+    auto saved = std::make_shared<bool>(false);
+    worker::RunLong([path = configPath_, settings, writes, history, saved] {
+        std::lock_guard<std::recursive_mutex> l(DiskWriteLock());
+        std::wstring err;
+        *saved = !settings->empty() && WriteFileAtomic(path, *settings, err);
+        for (auto& [file, data] : *writes) WriteFileAtomic(file, data, err);
+        HistoryRecorder::Append(*history);
+    }, [this, settings, saved] {
+        saving_ = false;
+        // Settings changed while the file was being written stay dirty for the next save.
+        if (*saved && settings_.Serialize() == *settings) settings_.ClearDirty();
+    });
+}
+
+void App::SaveFileAtomic(const std::wstring& path, std::string data) {
+    if (deferredWrites_) {
+        deferredWrites_->emplace_back(path, std::move(data));
+        return;
+    }
+    std::lock_guard<std::recursive_mutex> l(DiskWriteLock());
+    std::wstring err;
+    WriteFileAtomic(path, data, err);
 }
 
 void App::SaveWindowPlacement() {
@@ -717,6 +760,7 @@ void App::EvaluateDiagnostics() {
     for (auto& g : snap_->gpus) if (g.temperatureC > 0) in.gpuTempsC.push_back(g.temperatureC);
     in.appCrashes24h = events.crashes24h;
     in.unexpectedShutdowns30d = events.kernelPower30d;
+    in.unexpectedShutdownTimes = events.kernelPowerTimes;
     in.whea30d = events.whea30d;
 
     alerts_ = nx::EvaluateDiagnostics(in);
@@ -798,14 +842,22 @@ void App::EnsureEventCounts() {
     }
     events.loading = true;
     auto out = std::make_shared<std::array<int, 4>>();
-    worker::Run([out] {
+    auto shutdowns = std::make_shared<std::vector<std::wstring>>();
+    worker::Run([out, shutdowns] {
+        const wchar_t* kernelPower41 = L"*[System[Provider[@Name='Microsoft-Windows-Kernel-Power'] and EventID=41 and TimeCreated[timediff(@SystemTime) <= 2592000000]]]";
         (*out)[0] = CountEvents(L"Application", L"*[System[(EventID=1000 or EventID=1002) and TimeCreated[timediff(@SystemTime) <= 86400000]]]", 500);
-        (*out)[1] = CountEvents(L"System", L"*[System[Provider[@Name='Microsoft-Windows-Kernel-Power'] and EventID=41 and TimeCreated[timediff(@SystemTime) <= 2592000000]]]", 500);
+        (*out)[1] = CountEvents(L"System", kernelPower41, 500);
+        // When they happened, so the alert is not mistaken for something that just occurred.
+        for (auto& e : QueryEvents(L"System", kernelPower41, 5, false)) {
+            FILETIME utc{static_cast<DWORD>(e.time), static_cast<DWORD>(e.time >> 32)}, local;
+            if (e.time && FileTimeToLocalFileTime(&utc, &local)) shutdowns->push_back(FormatFileTime(FileTimeToU64(local)));
+        }
         (*out)[2] = CountEvents(L"System", L"*[System[Provider[@Name='Microsoft-Windows-WHEA-Logger'] and TimeCreated[timediff(@SystemTime) <= 2592000000]]]", 500);
         (*out)[3] = CountEvents(L"System", L"*[System[(Level=1 or Level=2) and TimeCreated[timediff(@SystemTime) <= 86400000]]]", 1000);
-    }, [this, out] {
+    }, [this, out, shutdowns] {
         events.crashes24h = (*out)[0];
         events.kernelPower30d = (*out)[1];
+        events.kernelPowerTimes = std::move(*shutdowns);
         events.whea30d = (*out)[2];
         events.errors24h = (*out)[3];
         events.loaded = true;
@@ -1021,7 +1073,7 @@ LRESULT App::WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         if (pacer_.OnTimer(h, wp)) return 0;
         if (wp == kTimerStatus) { KillTimer(h, kTimerStatus); status_.clear(); Invalidate(); }
         else if (wp == kTimerTooltip) { KillTimer(h, kTimerTooltip); input_.tooltipReady = true; Invalidate(); }
-        else if (wp == kTimerSave) { SaveSettings(); recorder_.Flush(); }
+        else if (wp == kTimerSave) SaveInBackground();
         return 0;
     case WM_NX_SNAPSHOT: OnSnapshot(); return 0;
     case WM_NX_DEFERRED: RunDeferred(); return 0;

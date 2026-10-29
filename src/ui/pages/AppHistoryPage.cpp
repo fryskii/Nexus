@@ -128,8 +128,7 @@ private:
                           static_cast<unsigned long long>(u.firstSeen), static_cast<unsigned long long>(u.lastSeen), u.launches);
             s += b + ToUtf8(u.path) + "\t" + ToUtf8(u.name) + "\t" + ToUtf8(u.publisher) + "\n";
         }
-        std::wstring err;
-        WriteFileAtomic(FilePath(), s, err);
+        app.SaveFileAtomic(FilePath(), std::move(s));
     }
 
     void LoadFile() {

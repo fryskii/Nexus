@@ -41,6 +41,7 @@ struct DiagInput {
     std::vector<double> gpuTempsC;
     int appCrashes24h = -1;           // Application Error (1000) / hangs (1002), -1 unknown
     int unexpectedShutdowns30d = -1;  // Kernel-Power 41, -1 unknown
+    std::vector<std::wstring> unexpectedShutdownTimes; // local times of the most recent ones, newest first
     int whea30d = -1;                 // WHEA-Logger events, -1 unknown
 };
 

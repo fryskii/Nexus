@@ -3,6 +3,7 @@
 #include "data/Model.h"
 
 #include <cstdint>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -25,8 +26,12 @@ public:
     void Configure(bool enabled, const std::wstring& folder, int retentionDays, int everyNSamples);
     bool Enabled() const { return enabled_; }
     const std::wstring& Folder() const { return folder_; }
-    void Add(const HistoryPoint& p);
-    void Flush();
+    void Add(const HistoryPoint& p); // no disk access: the lines wait for TakePending or Flush
+    // Lines to append and the file they belong to, taken for a writer on another thread.
+    struct Chunk { std::wstring path; std::string data; };
+    Chunk TakePending();
+    static void Append(const Chunk& c); // the caller holds DiskWriteLock()
+    void Flush();                       // TakePending and Append now, on this thread
 
 private:
     void Prune();
@@ -34,12 +39,13 @@ private:
     std::wstring folder_;
     int retentionDays_ = 7, every_ = 5, counter_ = 0;
     std::string pending_;
-    uint64_t lastFlush_ = 0;
 };
 
 bool ExportHistoryCsv(const std::wstring& path, const std::vector<HistoryPoint>& points, std::wstring& error);
 bool ExportHistoryJson(const std::wstring& path, const std::vector<HistoryPoint>& points, std::wstring& error);
 bool WriteFileAtomic(const std::wstring& path, const std::string& data, std::wstring& error);
+// Serialises NEXUS's own settings and history writes, some of which run on a background thread.
+std::recursive_mutex& DiskWriteLock();
 std::string HistoryCsvHeader();
 std::string HistoryCsvLine(const HistoryPoint& p);
 

@@ -51,6 +51,11 @@ std::string HistoryCsvLine(const HistoryPoint& p) {
     return b;
 }
 
+std::recursive_mutex& DiskWriteLock() {
+    static auto* m = new std::recursive_mutex; // never destroyed: a background writer may still hold it while NEXUS exits
+    return *m;
+}
+
 bool WriteFileAtomic(const std::wstring& path, const std::string& data, std::wstring& error) {
     // Write a new temporary file and rename it over the target: an existing file (which could be a
     // link planted by another program) is never opened for writing. See SafeFile.h.
@@ -124,30 +129,38 @@ void HistoryRecorder::Add(const HistoryPoint& p) {
     if (!enabled_) return;
     if (++counter_ % every_) return;
     pending_ += HistoryCsvLine(p);
-    // Batch writes: at most one disk write every 60 s (or when the buffer grows).
-    uint64_t now = GetTickCount64();
-    if (now - lastFlush_ > 60000 || pending_.size() > 64 * 1024) Flush();
 }
 
-void HistoryRecorder::Flush() {
-    lastFlush_ = GetTickCount64();
-    if (!enabled_ || pending_.empty() || folder_.empty()) return;
+HistoryRecorder::Chunk HistoryRecorder::TakePending() {
+    Chunk c;
+    if (!enabled_ || pending_.empty() || folder_.empty()) return c;
     SYSTEMTIME st;
     GetSystemTime(&st);
     wchar_t name[64];
     swprintf(name, 64, L"\\nexus-%04u-%02u-%02u.csv", st.wYear, st.wMonth, st.wDay);
-    std::wstring path = folder_ + name;
+    c.path = folder_ + name;
+    c.data.swap(pending_);
+    return c;
+}
+
+void HistoryRecorder::Append(const Chunk& c) {
+    if (c.data.empty()) return;
     SafeWriteGuard guard;
-    if (!guard.Prepare(path)) { pending_.clear(); return; }
-    HANDLE h = guard.Open(path, FILE_APPEND_DATA, OPEN_ALWAYS);
-    if (h == INVALID_HANDLE_VALUE) { pending_.clear(); return; }
+    if (!guard.Prepare(c.path)) return;
+    HANDLE h = guard.Open(c.path, FILE_APPEND_DATA, OPEN_ALWAYS);
+    if (h == INVALID_HANDLE_VALUE) return;
     LARGE_INTEGER size{};
     bool exists = GetFileSizeEx(h, &size) && size.QuadPart > 0;
-    std::string data = exists ? pending_ : HistoryCsvHeader() + pending_;
+    std::string data = exists ? c.data : HistoryCsvHeader() + c.data;
     DWORD w = 0;
     WriteFile(h, data.data(), static_cast<DWORD>(data.size()), &w, nullptr);
     CloseHandle(h);
-    pending_.clear();
+}
+
+void HistoryRecorder::Flush() {
+    Chunk c = TakePending();
+    std::lock_guard<std::recursive_mutex> l(DiskWriteLock());
+    Append(c);
 }
 
 void HistoryRecorder::Prune() {
