@@ -112,12 +112,12 @@ public:
             Rect c = Row(ui, x, w, L"Update speed", L"How often NEXUS samples the system. Slower speeds use less CPU. NEXUS automatically slows down while hidden.");
             int ms = static_cast<int>(cfg.GetInt("refresh.ms", 1000));
             bool paused = cfg.GetBool("refresh.paused", false);
-            std::wstring cur = paused ? L"Paused" : ms <= 500 ? L"High (0.5 s)" : ms <= 1000 ? L"Normal (1 s)" : ms <= 2000 ? L"Low (2 s)" : L"Very low (4 s)";
+            std::wstring cur = paused ? L"Paused" : ms <= 250 ? L"Very high (0.25 s)" : ms <= 500 ? L"High (0.5 s)" : ms <= 1000 ? L"Normal (1 s)" : ms <= 2000 ? L"Low (2 s)" : L"Very low (4 s)";
             if (ui.ComboButton(Id("set.refresh"), {c.R() - 200, c.y + (c.h - 32) / 2, 200, 32}, cur)) {
                 ui.Defer([this] {
-                    UINT r = app.ShowMenu({{1, L"High (0.5 s)"}, {2, L"Normal (1 s)"}, {3, L"Low (2 s)"}, {4, L"Very low (4 s)"}, MenuItem::Sep(), {5, L"Paused"}});
-                    int nms[] = {0, 500, 1000, 2000, 4000};
-                    if (r >= 1 && r <= 4) { app.Config().SetInt("refresh.ms", nms[r]); app.Config().SetBool("refresh.paused", false); }
+                    UINT r = app.ShowMenu({{6, L"Very high (0.25 s)"}, {1, L"High (0.5 s)"}, {2, L"Normal (1 s)"}, {3, L"Low (2 s)"}, {4, L"Very low (4 s)"}, MenuItem::Sep(), {5, L"Paused"}});
+                    int nms[] = {0, 500, 1000, 2000, 4000, 0, 250};
+                    if ((r >= 1 && r <= 4) || r == 6) { app.Config().SetInt("refresh.ms", nms[r]); app.Config().SetBool("refresh.paused", false); }
                     if (r == 5) app.Config().SetBool("refresh.paused", true);
                     if (r) { app.ApplyRefreshRate(); app.UpdateDemand(); ResizeHistory(); }
                 });

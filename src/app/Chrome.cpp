@@ -271,7 +271,8 @@ void App::OverflowMenu() {
     bool paused = sampler_->Paused();
     bool top = settings_.GetBool("window.topmost", false);
     MenuItem speed{0, L"Update speed"};
-    speed.sub = {{11, L"High (0.5 s)", ms == 500, true, false, true},
+    speed.sub = {{15, L"Very high (0.25 s)", ms == 250, true, false, true},
+                 {11, L"High (0.5 s)", ms == 500, true, false, true},
                  {12, L"Normal (1 s)", ms == 1000, true, false, true},
                  {13, L"Low (2 s)", ms == 2000, true, false, true},
                  {14, L"Very low (4 s)", ms == 4000, true, false, true}};
@@ -303,11 +304,13 @@ void App::OverflowMenu() {
     case 8: ExportReport(); break;
     case 9: ExportHistory(false); break;
     case 10: Navigate(PageId::Settings); break;
-    case 11: case 12: case 13: case 14: {
-        int nms[] = {500, 1000, 2000, 4000};
+    case 11: case 12: case 13: case 14: case 15: {
+        int nms[] = {500, 1000, 2000, 4000, 250};
         settings_.SetInt("refresh.ms", nms[c - 11]);
         settings_.SetBool("refresh.paused", false);
         ApplyRefreshRate();
+        // Keep the graphs spanning the same time at the new rate (as Settings does).
+        hist_.Resize(static_cast<size_t>(std::clamp<int64_t>(settings_.GetInt("graph.historySeconds", 60) * 1000 / nms[c - 11], 30, 7200)));
         UpdateDemand();
         break;
     }
