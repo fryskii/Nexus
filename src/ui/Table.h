@@ -51,7 +51,7 @@ public:
     std::vector<TableColumn> columns;
     int sortCol = -1;
     bool sortDesc = true;
-    float scrollY = 0;
+    float scrollY = 0, scrollX = 0; // scrollX: columns wider than the panel scroll sideways
     uint64_t selectedKey = 0;
     bool compact = false;
     bool showIcons = true;
@@ -91,7 +91,7 @@ private:
     float viewH_ = 0;
     bool ensureVisible_ = false;
     int resizing_ = -1, dragging_ = -1;
-    float resizeStartX_ = 0, resizeStartW_ = 0, dragStartX_ = 0, sbDragY_ = 0, sbDragOff_ = 0;
+    float resizeStartX_ = 0, resizeStartW_ = 0, dragStartX_ = 0, sbDragY_ = 0, sbDragOff_ = 0, hsbDragX_ = 0, hsbDragOff_ = 0;
     mutable std::wstring cell_;
     std::vector<int> order_; // display order -> column index
     std::unordered_map<std::wstring, std::pair<float, float>> titleMinW_; // title width on one line / two lines (Caption)

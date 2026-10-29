@@ -134,9 +134,8 @@ void Table::Draw(Ui& ui, const Rect& r, TableSource& src) {
     if (!fillFirst) { DrawImpl(ui, r, src); return; }
     // When the panel is too narrow, squeeze the other columns for this frame only so the saved
     // widths survive a temporary resize. A width changed by the user during the frame is kept.
-    // First down to where both the title and typical values fit (64 px keeps values such as PIDs
-    // readable), then (too many columns for the window) wide titles give way down to 64 px, and as
-    // a last resort everything shrinks further, so no column is pushed out of view.
+    // Only down to where both the title and typical values fit (64 px keeps values such as PIDs
+    // readable); if that is still too wide, DrawImpl scrolls the columns sideways.
     int firstCol = -1;
     float others = 0;
     for (int ci : order_) {
@@ -161,10 +160,7 @@ void Table::Draw(Ui& ui, const Rect& r, TableSource& src) {
             excess -= cut;
         }
     };
-    auto plainFloor = [&](int ci, float plain) { return columns[ci].icon != MetricIcon::None ? 84.f : plain; };
-    squeeze([&](int ci) { return std::max(soft(ci), plainFloor(ci, 64.f)); });
-    squeeze([&](int ci) { return plainFloor(ci, 64.f); });
-    squeeze([&](int ci) { return plainFloor(ci, 40.f); });
+    squeeze([&](int ci) { return std::max(soft(ci), columns[ci].icon != MetricIcon::None ? 84.f : 64.f); });
     for (size_t i = 0; i < columns.size(); ++i) saved[i].second = columns[i].width;
     DrawImpl(ui, r, src);
     for (size_t i = 0; i < columns.size(); ++i)
@@ -193,6 +189,25 @@ void Table::DrawImpl(Ui& ui, const Rect& r, TableSource& src) {
         }
         if (firstCol >= 0) columns[firstCol].width = std::max(160.f, r.w - 2 * pad - others - 4);
     }
+    // Columns wider than the panel scroll sideways; the first visible column (Name) stays pinned.
+    // Columns that scroll are clipped to `scrollArea`, and so are their hit rectangles, so a
+    // column scrolled under the pinned one cannot take its clicks.
+    int pinned = -1;
+    float total = 0;
+    for (int ci : order_) {
+        if (!columns[ci].visible) continue;
+        if (pinned < 0) pinned = ci;
+        total += columns[ci].width;
+    }
+    float pinnedW = pinned >= 0 ? columns[pinned].width : 0;
+    float maxScrollX = std::max(0.f, total + 2 * pad - r.w);
+    scrollX = std::clamp(scrollX, 0.f, maxScrollX);
+    Rect scrollArea{r.x + pad + pinnedW, r.y, std::max(0.f, r.w - 2 * pad - pinnedW), r.h};
+    auto visiblePart = [&](const Rect& a, int ci) {
+        if (ci == pinned) return a;
+        float left = std::max(a.x, scrollArea.x), right = std::min(a.R(), scrollArea.R());
+        return Rect{left, a.y, std::max(0.f, right - left), a.h};
+    };
 
     // ---------------- Header ----------------
     g.FillRound(header, 12.f, t.panel);
@@ -204,11 +219,15 @@ void Table::DrawImpl(Ui& ui, const Rect& r, TableSource& src) {
         auto& c = columns[ci];
         if (!c.visible) continue;
         Rect cr{x, header.y, c.width, headerH};
+        x += c.width;
+        if (ci == pinned) x -= scrollX;
+        else if (cr.R() < scrollArea.x || cr.x > scrollArea.R()) continue; // scrolled out of view
+        if (ci != pinned) g.PushClip({scrollArea.x, header.y, scrollArea.w, header.h});
         WidgetId hid = IdMix(id_, 1000 + ci);
         WidgetId gid = IdMix(id_, 5000 + ci);
         Rect grip{cr.R() - 4, cr.y, 8, cr.h};
-        bool gripHot = ui.Hit(gid, grip);
-        bool hot = ui.Hit(hid, {cr.x, cr.y, cr.w - 4, cr.h});
+        bool gripHot = ui.Hit(gid, visiblePart(grip, ci));
+        bool hot = ui.Hit(hid, visiblePart({cr.x, cr.y, cr.w - 4, cr.h}, ci));
         if (ui.Pressed(gid)) { resizing_ = ci; resizeStartX_ = ui.in.mx; resizeStartW_ = c.width; ui.SetActive(gid); }
         if (ui.Pressed(hid)) { dragging_ = static_cast<int>(di); dragStartX_ = ui.in.mx; }
         bool sorted = sortCol == ci;
@@ -249,7 +268,7 @@ void Table::DrawImpl(Ui& ui, const Rect& r, TableSource& src) {
         if (ui.RightClicked(hid) || ui.RightClicked(gid)) { headerMenu = true; headerMenuColumn = ci; }
         if (!c.tooltip.empty()) ui.Tooltip(hid, c.tooltip);
         if (gripHot || resizing_ == ci) g.Line(cr.R() - 0.5f, cr.y + 10, cr.R() - 0.5f, cr.B() - 10, t.accent.Alpha(0.6f));
-        x += c.width;
+        if (ci != pinned) g.PopClip();
     }
     // Column resize / reorder dragging.
     if (resizing_ >= 0) {
@@ -267,6 +286,7 @@ void Table::DrawImpl(Ui& ui, const Rect& r, TableSource& src) {
                     if (!c.visible) continue;
                     if (ui.in.mx >= xx && ui.in.mx < xx + c.width) { target = static_cast<int>(di); break; }
                     xx += c.width;
+                    if (order_[di] == pinned) xx -= scrollX;
                 }
                 if (target != dragging_) {
                     int col = order_[dragging_];
@@ -292,11 +312,15 @@ void Table::DrawImpl(Ui& ui, const Rect& r, TableSource& src) {
     WidgetId bodyId = IdMix(id_, 2);
     ui.Hit(bodyId, body);
     // Only take the wheel when there is something to scroll, so enclosing views can scroll.
-    if (contentH > body.h) {
+    // Shift+wheel scrolls sideways.
+    bool horizontal = ui.in.shift && maxScrollX > 0;
+    if (horizontal || contentH > body.h) {
         float wh = ui.Wheel(body);
-        if (wh != 0) scrollY -= wh * rowH * 3;
+        if (wh != 0 && horizontal) scrollX -= wh * 80.f;
+        else if (wh != 0) scrollY -= wh * rowH * 3;
     }
     scrollY = std::clamp(scrollY, 0.f, std::max(0.f, contentH - body.h));
+    scrollX = std::clamp(scrollX, 0.f, maxScrollX);
 
     g.PushClip(body);
     // Rounded panels: one per group (from its header to the row before the next header), or one for all rows.
@@ -346,11 +370,15 @@ void Table::DrawImpl(Ui& ui, const Rect& r, TableSource& src) {
         Color textC = hl == 3 ? t.textTertiary : t.text;
 
         float cx = r.x + pad;
-        bool firstVisible = true;
+        bool firstVisible = true, clipped = false;
         for (int ci : order_) {
             auto& c = columns[ci];
             if (!c.visible) continue;
             Rect cr{cx, y, c.width, rowH};
+            cx += c.width;
+            if (ci == pinned) cx -= scrollX;
+            else if (cr.R() < scrollArea.x || cr.x > scrollArea.R()) continue; // scrolled out of view
+            if (ci != pinned && !clipped) { g.PushClip({scrollArea.x, body.y, scrollArea.w, body.h}); clipped = true; }
             if (heatMap && c.heat) {
                 float h = src.CellHeat(row, ci);
                 if (h >= 0 && (c.heatAlways || h > 0.02f)) g.FillRound(cr.Inset(3, 3), 7.f, t.Heat(h));
@@ -388,8 +416,8 @@ void Table::DrawImpl(Ui& ui, const Rect& r, TableSource& src) {
             }
             Color cc = src.CellColor(row, ci, t);
             g.Text(cell_, tr, Font::Body, cc.a > 0 ? cc : textC, c.align);
-            cx += c.width;
         }
+        if (clipped) g.PopClip();
         if (ui.Pressed(rid) || (ui.in.rPressed && hot)) {
             if (src.RowKey(row) != selectedKey) { selectedKey = src.RowKey(row); selectionChanged = true; }
         }
@@ -413,6 +441,19 @@ void Table::DrawImpl(Ui& ui, const Rect& r, TableSource& src) {
         if (ui.Pressed(sid)) { sbDragY_ = ui.in.my; sbDragOff_ = scrollY; }
         if (ui.IsActive(sid) && ui.in.lDown) scrollY = std::clamp(sbDragOff_ + (ui.in.my - sbDragY_) * contentH / body.h, 0.f, contentH - body.h);
         g.FillRound({body.R() - (hot ? 9.f : 7.f), thumbY, hot ? 6.f : 4.f, thumbH}, 3.f, t.textTertiary.Alpha(hot ? 0.8f : 0.45f));
+    }
+    // Horizontal scrollbar, under the columns that scroll.
+    if (maxScrollX > 0) {
+        float span = scrollArea.w + maxScrollX;
+        float trackW = scrollArea.w - 12;
+        float thumbW = std::max(40.f, trackW * scrollArea.w / span);
+        float thumbX = scrollArea.x + 6 + (trackW - thumbW) * scrollX / maxScrollX;
+        WidgetId hsid = IdMix(id_, 4);
+        Rect hitR{scrollArea.x, body.B() - 14, scrollArea.w, 14};
+        bool hot = ui.Hit(hsid, hitR);
+        if (ui.Pressed(hsid)) { hsbDragX_ = ui.in.mx; hsbDragOff_ = scrollX; }
+        if (ui.IsActive(hsid) && ui.in.lDown) scrollX = std::clamp(hsbDragOff_ + (ui.in.mx - hsbDragX_) * span / scrollArea.w, 0.f, maxScrollX);
+        g.FillRound({thumbX, body.B() - (hot ? 9.f : 7.f), thumbW, hot ? 6.f : 4.f}, 3.f, t.textTertiary.Alpha(hot ? 0.8f : 0.45f));
     }
 }
 
