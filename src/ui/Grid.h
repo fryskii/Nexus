@@ -21,7 +21,7 @@ struct GridRow {
     std::wstring iconPath;
     bool group = false;
     int depth = 0;
-    Color color;                // optional text color for column `colorCol`
+    Color color = Color::None(); // optional text color for column `colorCol`
     int colorCol = -1;
 };
 

@@ -20,7 +20,7 @@ struct TableColumn {
     std::wstring tooltip;
     std::wstring header2;     // header value, e.g. total "34%"; shown as a metric pill when `icon` is set
     MetricIcon icon = MetricIcon::None;
-    Color tint;               // pill / icon tint
+    Color tint = Color::None(); // pill / icon tint (none: accent)
     bool heatAlways = false;  // draw the heat block even at zero load (CPU / Memory columns)
 };
 

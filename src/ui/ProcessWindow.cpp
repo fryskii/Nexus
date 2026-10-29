@@ -438,7 +438,7 @@ private:
         float y = r.y - scroll_;
         float kw = 170;
         g.PushClip(r);
-        auto kv = [&](const std::wstring& k, const std::wstring& v, Color c = {}) {
+        auto kv = [&](const std::wstring& k, const std::wstring& v, Color c = Color::None()) {
             if (y > r.y - 24 && y < r.B()) ui.KeyValue(r.x, y, kw, colW - kw, k, v, c);
             y += 24;
         };

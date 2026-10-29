@@ -19,6 +19,7 @@ struct Color {
     static constexpr Color Hex(uint32_t rgb, float a = 1.f) {
         return {((rgb >> 16) & 0xFF) / 255.f, ((rgb >> 8) & 0xFF) / 255.f, (rgb & 0xFF) / 255.f, a};
     }
+    static constexpr Color None() { return {0, 0, 0, 0}; } // "use the default colour" (Color{} is opaque black)
     Color Alpha(float na) const { return {r, g, b, na}; }
     Color Mix(const Color& o, float t) const { return {r + (o.r - r) * t, g + (o.g - g) * t, b + (o.b - b) * t, a + (o.a - a) * t}; }
     D2D1_COLOR_F D2D() const { return {r, g, b, a}; }

@@ -54,7 +54,7 @@ inline float SectionHeader(Gfx& g, const Theme& t, float x, float y, float w, co
 }
 
 // Wraps long text into a card-like info block; returns height used.
-inline float InfoText(Gfx& g, const Theme& t, const Rect& r, const std::wstring& text, Color c = {}) {
+inline float InfoText(Gfx& g, const Theme& t, const Rect& r, const std::wstring& text, Color c = Color::None()) {
     return g.Paragraph(text, r, Font::Small, c.a > 0 ? c : t.textSecondary);
 }
 

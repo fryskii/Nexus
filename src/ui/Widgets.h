@@ -78,7 +78,7 @@ public:
     std::vector<std::function<void()>> TakeDeferred() { return std::move(deferred_); }
 
     // Key/value line helpers for info panels: returns next y.
-    float KeyValue(float x, float y, float keyW, float valW, const std::wstring& key, const std::wstring& value, Color valueColor = {});
+    float KeyValue(float x, float y, float keyW, float valW, const std::wstring& key, const std::wstring& value, Color valueColor = Color::None());
     void Badge(const Rect& r, const std::wstring& text, Color bg, Color fg);
     void Meter(const Rect& r, float fraction, Color fill);
     void Ring(float cx, float cy, float radius, float fraction, Color fill, float width);
