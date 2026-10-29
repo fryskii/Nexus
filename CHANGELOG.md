@@ -2,7 +2,7 @@
 
 Test builds are on the [Releases page](https://github.com/fryskii/Nexus/releases).
 
-## Unreleased
+## 0.9.0-alpha.3 (2026-10-29)
 
 Fixed
 - Memory grew by a few KB every time a process inspector window was opened and closed (about 10 MB an hour in a 6-hour
