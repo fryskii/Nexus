@@ -82,18 +82,24 @@ Tested on an i5-14400F / RTX 5060 / Windows 11 Home 26200 PC, built natively wit
 - **Smoke-test parts 1–3 done** (ticked below), with fixes for: widget-ID collisions, insights cards,
   invisible text colours, layout overlaps, frame pacing, slow re-sort, the hidden elevated-helper
   confirmation, worker starvation, boxed/fitted headers and horizontal table scrolling.
-- **Part 4 started 2026-10-28, then paused for an early preview release** (v0.9.0-alpha.1, a
-  GitHub pre-release built by CI from a `v*` tag; notes in docs/RELEASE_NOTES.md). Checked on a
-  copy of PING.EXE run from %TEMP% (System32 binaries count as Windows processes, which are refused
-  Efficiency mode by design), each result confirmed outside NEXUS: efficiency mode on (EcoQoS +
-  Idle) and off (EcoQoS explicitly off, Normal), Below normal priority, affinity to CPUs 0-1,
-  suspend (all threads suspended) and resume.
-- **Next:** finish part 4 (full dump and minidump, wait chain on a suspended process); then
-  settings/integration (persistence, portable, start with Windows, tray, mini monitor, Task Manager
-  replacement); installer (needs NSIS); DPI/light theme.
+- **Early preview released 2026-10-28:** v0.9.0-alpha.1, a GitHub pre-release built by CI from a
+  `v*` tag (notes in docs/RELEASE_NOTES.md).
+- **Smoke-test part 4 done** on a copy of PING.EXE run from %TEMP% (System32 binaries count as
+  Windows processes, which are refused Efficiency mode by design), each result confirmed outside
+  NEXUS: efficiency mode on (EcoQoS + Idle) and off, Below normal priority, affinity to CPUs 0-1,
+  suspend/resume. Dumps and wait chains ran through NEXUS's own code from a test program, not the
+  menu (their result dialogs are not yet seen): full dump (14 MB) and minidump (51 KB) both valid
+  (requested streams, all memory, unique file names); a dump of csrss.exe is refused without
+  leaving a file; wait chains found mutex and critical-section deadlocks and a process wait in
+  about 0.3 s each, also on a suspended process.
+- **Next:** settings/integration (persistence, portable, start with Windows, tray, mini monitor,
+  Task Manager replacement); installer (needs NSIS); DPI/light theme.
 - **Ideas noted:** without admin the Network column only shows "—" (reason in its tooltip); a
   visible "run as administrator" hint would help. Changing a service start type and toggling
   startup apps still wait for the elevated helper on the UI thread (window freezes until answered).
+  Wait-chain wording: a process wait shows "thread 0 (PID n)" instead of the process; a thread
+  waiting on a deadlocked thread is counted "in a deadlock cycle"; a suspended process reports "not
+  blocked by a wait chain" (could say its threads are suspended).
 
 ## Validation plan (next session on Windows 11)
 
@@ -110,7 +116,7 @@ Tested on an i5-14400F / RTX 5060 / Windows 11 Home 26200 PC, built natively wit
 
 - [x] Processes: grouping (apps own their child processes), tree, flat, search terms, sort, column chooser, header totals, heat map
 - [x] End task / tree on a test app; refusal for csrss.exe (access-denied → restart-as-admin offer not yet seen)
-- [ ] Efficiency mode on/off ✓ (leaf status ✓); priority ✓; affinity ✓; suspend/resume ✓; full dump and minidump; wait chain
+- [x] Efficiency mode on/off (leaf status); priority; affinity; suspend/resume; full dump and minidump; wait chain (dumps and wait chain without the menu)
 - [x] Performance: CPU % matches Task Manager (±2%), speed, logical-processor graphs, memory composition, disks, adapters, GPU engines and temperature
 - [x] Details: all columns populated; sort by every column
 - [x] Services: start/stop/restart (non-elevated → UAC helper), start-type change
