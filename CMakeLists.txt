@@ -42,6 +42,7 @@ if(WIN32)
     src/app/App.cpp
     src/app/Chrome.cpp
     src/app/Commands.cpp
+    src/app/CrashReport.cpp
     src/app/Stress.cpp
     src/app/Tray.cpp
     src/app/MiniMonitor.cpp

@@ -1,4 +1,5 @@
 #include "app/App.h"
+#include "app/CrashReport.h"
 #include "app/StressState.h"
 #include "app/MiniMonitor.h"
 #include "app/Tray.h"
@@ -326,6 +327,23 @@ bool App::Create(int nCmdShow, bool startMinimized) {
         ShowWindow(hwnd_, nCmdShow);
     }
     UpdateWindow(hwnd_);
+
+    // After a crash, point to the report so that it can go with a bug report.
+    uint64_t newestCrash = 0;
+    auto crashes = stress_ ? std::vector<std::wstring>() : crash::ReportsAfter(static_cast<uint64_t>(settings_.GetInt("crash.seen", 0)), &newestCrash);
+    if (!crashes.empty()) {
+        settings_.SetInt("crash.seen", static_cast<int64_t>(newestCrash));
+        std::wstring report = crashes.front();
+        deferred_.push_back([this, report] {
+            if (Confirm(L"NEXUS closed unexpectedly",
+                        L"It saved a crash report. If you report the problem, please attach the newest .txt and .dmp files from this folder. "
+                        L"The .dmp file holds part of NEXUS's memory, such as process names and command lines, so share it only with people "
+                        L"you trust.\n\n" + crash::Folder(),
+                        L"Open folder"))
+                OpenFileLocation(report);
+        });
+        PostMessageW(hwnd_, WM_NX_DEFERRED, 0, 0);
+    }
     return true;
 }
 

@@ -1,5 +1,6 @@
 // NEXUS entry point: single-instance handling, privileged helper actions and benchmark mode.
 #include "app/App.h"
+#include "app/CrashReport.h"
 #include "core/Format.h"
 #include "core/Win.h"
 #include "data/ProcessOps.h"
@@ -248,6 +249,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int nCmdShow) {
     // follow this rule too. Nothing may call into a delay-loaded DLL before this line.
     SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32);
     HeapSetInformation(nullptr, HeapEnableTerminationOnCorruption, nullptr, 0);
+    crash::Install(); // a crash leaves a report in %LOCALAPPDATA%\NEXUS\Crashes (see CrashReport.h)
 
     if (!args.empty()) {
         int hr = RunHelper(args);
