@@ -287,6 +287,24 @@ public:
             for (auto& gp : s.gpus) gmax = std::max(gmax, gp.util);
             table_.columns[CGpu].header2 = s.gpuCollected ? FormatPercent(gmax) : L"\u2014";
         }
+        // Without administrator rights the Network column can only show "—": say why and offer the fix.
+        if (snap_ && !snap_->netPerProcess && !app.Elevated() && table_.columns[CNet].visible && app.Config().GetBool("net.etw", true) &&
+            app.Config().GetBool("processes.netHint", true)) {
+            Rect strip = r.TakeBottom(46);
+            Rect bar{strip.x, strip.y + 8, strip.w, strip.h - 8};
+            ui.g.FillRound(bar, 8, t.info.Alpha(0.10f));
+            ui.g.StrokeRound(bar, 8, t.info.Alpha(0.30f));
+            Rect in = bar.Inset(12, 0);
+            ui.g.DrawIcon(MetricIcon::Network, {in.x, in.y + (in.h - 16) / 2, 16, 16}, t.network);
+            in.TakeLeft(26);
+            Rect hide = in.TakeRight(28);
+            if (ui.IconButton(Id("proc.nethint.close"), {hide.x, hide.y + (hide.h - 28) / 2, 28, 28}, 0xE711, L"Hide this hint"))
+                app.Config().SetBool("processes.netHint", false);
+            Rect restart = in.TakeRight(204);
+            if (ui.Button(Id("proc.nethint.admin"), {restart.x, restart.y + (restart.h - 28) / 2, restart.w - 8, 28}, L"Restart as administrator"))
+                ui.Defer([this] { app.RequestElevatedRestart(L"Measuring each process's network traffic requires administrator rights."); });
+            ui.g.Text(L"The Network column shows \u2014 because measuring each process's traffic requires administrator rights.", in, Font::Small, t.textSecondary);
+        }
         table_.compact = app.Compact() || table_.compact;
         if (table_.sortChanged) { table_.sortChanged = false; Rebuild(); }
         table_.Draw(ui, r, *this);
