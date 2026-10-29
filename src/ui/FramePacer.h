@@ -5,6 +5,9 @@
 // queued, and a pending repaint counts, so without this, windows whose frames are slower than their
 // update rate keep a paint pending forever and starve every timer on the thread (tooltips, status,
 // saving). With hardware rendering the gap is about a millisecond.
+// Time spent waiting for the display inside EndDraw (vsync) is not drawing work, so it does not
+// count, and frames cheaper than kFreeFrameMs get no gap at all: vsync already caps them at the
+// monitor's refresh rate, and a short SetTimer gap would be rounded up to the ~15.6 ms system tick.
 #include "core/Win.h"
 
 #include <algorithm>
@@ -18,8 +21,13 @@ inline double FrameClockMs() {
     return 1000.0 * static_cast<double>(t.QuadPart) / freq;
 }
 
+// Milliseconds the current frame spent presenting (added to by Gfx::End).
+inline double& PresentWaitMs() { static thread_local double ms = 0; return ms; }
+
 class FramePacer {
 public:
+    static constexpr double kFreeFrameMs = 8.0;
+
     explicit FramePacer(UINT_PTR timerId) : timer_(timerId) {}
 
     // Use instead of InvalidateRect(hwnd, nullptr, FALSE).
@@ -36,10 +44,12 @@ public:
     }
     // Wraps the WM_PAINT handler; returns the frame time in milliseconds.
     template <class F> double Paint(F&& paint) {
+        PresentWaitMs() = 0;
         double start = FrameClockMs();
         paint();
         double end = FrameClockMs();
-        NextFrame() = end + std::min(end - start, 500.0);
+        double work = std::max(0.0, end - start - PresentWaitMs());
+        NextFrame() = end + (work < kFreeFrameMs ? 0.0 : std::min(work, 500.0));
         return end - start;
     }
     // Call from WM_TIMER; returns true if the timer was the pacer's.

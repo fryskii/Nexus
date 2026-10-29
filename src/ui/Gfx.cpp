@@ -1,4 +1,5 @@
 #include "ui/Gfx.h"
+#include "ui/FramePacer.h"
 
 #include <dwrite_3.h>
 
@@ -195,7 +196,9 @@ bool Gfx::Begin() {
 
 void Gfx::End() {
     while (!clips_.empty()) PopClip();
-    HRESULT hr = rt_->EndDraw();
+    double t0 = FrameClockMs();
+    HRESULT hr = rt_->EndDraw(); // waits for vsync on hardware targets
+    PresentWaitMs() += FrameClockMs() - t0;
     if (hr == static_cast<HRESULT>(D2DERR_RECREATE_TARGET)) {
         brush_.Reset();
         layers_.clear();
