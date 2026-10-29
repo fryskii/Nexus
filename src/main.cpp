@@ -42,6 +42,14 @@ bool HelperConfirm(const std::wstring& title, const std::wstring& text, const st
     tc.cButtons = 2;
     tc.nDefaultButton = IDCANCEL;
     tc.dwFlags = TDF_ALLOW_DIALOG_CANCELLATION;
+    // No owner window (it belongs to the non-elevated NEXUS), so bring it to the front ourselves.
+    tc.pfCallback = [](HWND h, UINT n, WPARAM, LPARAM, LONG_PTR) -> HRESULT {
+        if (n == TDN_CREATED) {
+            SetWindowPos(h, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            SetForegroundWindow(h);
+        }
+        return S_OK;
+    };
     int button = IDCANCEL;
     if (FAILED(TaskDialogIndirect(&tc, &button, nullptr, nullptr)))
         return MessageBoxW(nullptr, (title + L"\n\n" + text).c_str(), L"NEXUS (administrator)", MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2 | MB_TOPMOST) == IDOK;

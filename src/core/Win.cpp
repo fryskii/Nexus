@@ -368,9 +368,12 @@ DWORD RunSelfElevatedAndWait(HWND owner, const std::wstring& args, DWORD timeout
     sei.lpVerb = L"runas";
     sei.lpFile = exe;
     sei.lpParameters = args.c_str();
-    sei.nShow = SW_HIDE;
+    // Not SW_HIDE: the helper has no main window, so Windows would apply the show state to its
+    // first window, the confirmation dialog, and the user would wait on a dialog they cannot see.
+    sei.nShow = SW_SHOWNORMAL;
     if (!ShellExecuteExW(&sei)) return GetLastError();
     if (!sei.hProcess) return ERROR_GEN_FAILURE;
+    AllowSetForegroundWindow(GetProcessId(sei.hProcess)); // let its confirmation come to the front
     DWORD code = ERROR_TIMEOUT;
     if (WaitForSingleObject(sei.hProcess, timeoutMs) == WAIT_OBJECT_0) GetExitCodeProcess(sei.hProcess, &code);
     CloseHandle(sei.hProcess);

@@ -103,7 +103,7 @@ bool CopyTextToClipboard(HWND owner, const std::wstring& text);
 bool ShellRun(HWND owner, const std::wstring& file, const std::wstring& args, bool elevated, int show = SW_SHOWNORMAL);
 // Runs NEXUS itself elevated with the given arguments (a privileged helper action), waits for it
 // and returns its exit code (a Win32 error code), or ERROR_CANCELLED if the UAC prompt was declined.
-DWORD RunSelfElevatedAndWait(HWND owner, const std::wstring& args, DWORD timeoutMs = 60000);
+DWORD RunSelfElevatedAndWait(HWND owner, const std::wstring& args, DWORD timeoutMs = 5 * 60000); // UAC + confirmation take a while
 // Converts a native NT path (\Device\HarddiskVolume3\...) to a DOS path (C:\...).
 std::wstring NtPathToDos(const std::wstring& nt);
 
