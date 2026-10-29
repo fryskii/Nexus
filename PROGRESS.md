@@ -73,7 +73,7 @@ redirection (SafeWriteGuard); history folder confined to the profile when elevat
 administrators; pointer-free window messages; bounded cross-process reads. To do on Windows: run
 `nexus_security_tests.exe` elevated (junction, symlink and ACL checks are skipped under Wine).
 
-## Where we left off (2026-10-28, first session on a real Windows 11 PC)
+## Where we left off (2026-10-28 and 29, first sessions on a real Windows 11 PC)
 
 Tested on an i5-14400F / RTX 5060 / Windows 11 Home 26200 PC, built natively with WinLibs MinGW-w64
 (no Visual Studio on that PC: `cmake -S . -B build-mingw -G Ninja -DCMAKE_BUILD_TYPE=Release`,
@@ -94,9 +94,10 @@ Tested on an i5-14400F / RTX 5060 / Windows 11 Home 26200 PC, built natively wit
   (requested streams, all memory, unique file names); a dump of csrss.exe is refused without
   leaving a file; wait chains found mutex and critical-section deadlocks and a process wait in
   about 0.3 s each, also on a suspended process.
-- **Next:** the tester's report (below); settings/integration (persistence, portable, start with
-  Windows, tray, mini monitor, Task Manager replacement); installer (CI builds it: test the release's
-  setup.exe); DPI/light theme.
+- **Next** (also in docs/RELEASE_CHECKLIST.md): the tester's answers (below); click-test the
+  2026-10-29 fixes; settings/integration (persistence, portable, start with Windows, tray, mini
+  monitor, Task Manager replacement); installer (CI builds it: test the release's setup.exe,
+  including installing over a running NEXUS); DPI/light theme; the 8-hour soak.
 - **Fixed 2026-10-29, not yet clicked through in the UI:** a bar under the process list explains
   the Network column's "—" without admin and offers Restart as administrator (× hides it,
   `processes.netHint`); changing a service start type, toggling an all-users startup app and the
@@ -110,10 +111,24 @@ Tested on an i5-14400F / RTX 5060 / Windows 11 Home 26200 PC, built natively wit
   the 60-second save (`kTimerSave` → `SaveSettings` → `WriteFileAtomic` with `FlushFileBuffers`,
   plus `recorder_.Flush()`) runs on the UI thread and waits for the disk. The "3" probably comes from
   the System diagnostics card (3 Kernel-Power 41 events in 30 days, likely before NEXUS was
-  installed). Proposed fix: do the periodic save on a worker thread; show the dates in that card.
+  installed). Fixed the same day: the 60-second save (settings, app-history file, recorded history;
+  `HistoryRecorder::Add` no longer writes either) is prepared on the UI thread and written by
+  `App::SaveInBackground` on a thread of its own, and closing waits for it through `DiskWriteLock()`;
+  the card lists when the shutdowns happened. Not yet seen on a slow disk.
   Asked the tester: whole-PC freeze or only NEXUS, disk active time with NEXUS closed, dates of the
-  Kernel-Power 41 events. Also seen: the Crashes tab query took 25+ s on that disk and holds one of
-  the two shared worker threads meanwhile (candidate for `worker::RunLong`).
+  Kernel-Power 41 events. The Crashes tab query took 25+ s on that disk; event-log queries (Crashes
+  and Events tabs, crash and shutdown counts) now run on `worker::RunLong` threads, so a slow disk no
+  longer holds up the two shared workers.
+- **Also on 2026-10-29:** crash reports (`src/app/CrashReport.cpp`: unhandled exceptions,
+  std::terminate and C runtime errors write a minidump and a summary to %LOCALAPPDATA%\NEXUS\Crashes
+  from a thread of their own, newest 10 kept, mentioned at the next start; tested with real
+  access-violation, stack-overflow, uncaught-exception and CRT-error crashes of a test program);
+  version labels (`NEXUS_VERSION_LABEL`: CI labels tag builds from the tag and other pushes
+  `dev.<commit>`, and fails a tag that does not match `CMakeLists.txt`); plain version tags make
+  full releases; artifact actions on upload v7 / download v8; installer and uninstaller wait up to
+  3 s for NEXUS to close, then end it (not run yet: part of the installer test); a GitHub bug-report
+  form; CHANGELOG.md, docs/RELEASE_CHECKLIST.md, and README, LIMITATIONS, STRESS_TESTING and
+  USER_GUIDE brought up to date.
 
 ## Validation plan (next session on Windows 11)
 
@@ -140,7 +155,7 @@ Tested on an i5-14400F / RTX 5060 / Windows 11 Home 26200 PC, built natively wit
 - [ ] Storage: NVMe health ✓, volumes ✓; SATA SMART not tested (no SATA drive)
 - [ ] Diagnostics: events, crashes, drivers, report export ✓; findings under synthetic load not tested
 - [ ] Settings persist across restarts; portable mode; start with Windows; replace Task Manager on/off; tray; mini monitor
-- [ ] Installer: install, upgrade over a running instance, uninstall leaves no files or registry entries (except user data unless selected)
+- [ ] Installer: install, upgrade over a running instance (it now waits up to 3 s for NEXUS to close), uninstall leaves no files or registry entries (except user data unless selected)
 
 ## Ideas after parity
 

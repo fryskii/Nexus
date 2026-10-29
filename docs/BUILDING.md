@@ -66,6 +66,10 @@ The Windows-specific layer is checked by running the application. `NEXUS.exe --b
 
 ## Reproducibility
 
-- Version: `project(NEXUS VERSION ...)` in `CMakeLists.txt`.
+- Version: `project(NEXUS VERSION ...)` in `CMakeLists.txt` and the file version in `res/nexus.rc`. An optional label is
+  added with `-DNEXUS_VERSION_LABEL=alpha.2` (or `NEXUS_VERSION_LABEL=alpha.2 ./scripts/package.sh`) and gives 0.9.0-alpha.2
+  in the app and the file names. In Windows PowerShell, quote the whole argument (`"-DNEXUS_VERSION_LABEL=alpha.2"`);
+  unquoted, the part after the dot is split off. CI takes the label from a release tag (v0.9.0-alpha.2) and uses
+  `dev.<commit>` for other pushes.
 - `scripts/package.sh` writes `dist/SHA256SUMS.txt`.
 - No network access is needed at build time.

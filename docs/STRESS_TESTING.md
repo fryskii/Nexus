@@ -70,13 +70,22 @@ redraws. Second-quarter vs last-quarter medians: private memory 102.3 → 103.3 
 The MSVC build also exposed a bug that MinGW and Wine hid: the core library was compiled without
 `/utf-8`, so temperatures read "Â°C". All targets are now compiled as UTF-8.
 
+## Results on a Windows 11 PC
+
+2026-10-29, Intel Core i5-14400F / NVIDIA RTX 5060 / Windows 11 26200, `scripts\stress.ps1` for 30 minutes with 300
+churned processes (10 replaced per second), full action mix: no crash or hang; 74,388 frames (average 4.8 ms, p95 13.8 ms,
+max 92 ms); 3,196 snapshots (median 1.8 ms); CPU 22% of one core under forced redraws. Handles, GDI/USER objects and threads
+flat. Second-quarter vs last-quarter medians: private memory 197.9 → 204.2 MB (+3.1%), working set 110.7 → 113.9 MB
+(+2.9%). Per tenth of the run, private memory moves within 206–218 MB while the working set rises slowly (115 → 121 MB from
+the third tenth to the last). Every per-process cache is bounded; an 8-hour soak will show whether the drift levels off.
+
 ## Results under Wine
 
 Recorded on Linux under Wine 9 with Xvfb (software rendering), 4 cores. Wine does not report
 private bytes, handle or GDI/USER counts (they read 0), its Direct2D draws text as geometry, and
 every window costs a large software swap chain, so absolute frame times and memory are far higher
-than on Windows. Leak trends, crashes, hangs and correctness are still meaningful. **Windows 11
-runs are still needed.**
+than on Windows. Leak trends, crashes, hangs and correctness are still meaningful. Results on a
+Windows 11 PC are above.
 
 | Test | Result |
 |---|---|

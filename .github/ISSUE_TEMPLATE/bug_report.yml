@@ -1,0 +1,56 @@
+name: Bug report
+description: Something in NEXUS is wrong, froze or crashed
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing NEXUS. The more of this you can fill in, the faster the problem can be found.
+  - type: input
+    id: version
+    attributes:
+      label: NEXUS version
+      description: Settings › About, or the name of the file you downloaded (for example 0.9.0-alpha.2).
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version and PC model
+      description: From Settings › System › About, for example "Windows 11 Pro 25H2, build 26200, Dell Latitude 7410".
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What happened?
+      options:
+        - NEXUS showed something wrong
+        - NEXUS stopped responding ("Not Responding")
+        - NEXUS closed by itself (crash)
+        - The whole PC froze, restarted or showed a blue screen
+        - Something else
+    validations:
+      required: true
+  - type: dropdown
+    id: admin
+    attributes:
+      label: Was NEXUS running as administrator?
+      options:
+        - "No"
+        - "Yes"
+        - "Not sure"
+  - type: textarea
+    id: details
+    attributes:
+      label: Steps and details
+      description: What did you do, what did you expect, and what happened instead? Screenshots or a short video help a lot.
+    validations:
+      required: true
+  - type: textarea
+    id: records
+    attributes:
+      label: Crash report or Windows records
+      description: |
+        If NEXUS crashed, it saved a report in %LOCALAPPDATA%\NEXUS\Crashes: attach the newest .txt and .dmp files. The .dmp file holds part of NEXUS's memory (such as process names and command lines), so only attach it if you are comfortable with that.
+        If the whole PC froze or restarted, open Start, type "reliability", open "View reliability history" and attach a screenshot of the details for that time.

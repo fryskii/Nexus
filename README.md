@@ -12,7 +12,7 @@ It aims to cover everything Task Manager does, show much more detail, and use fe
 
 ## Status
 
-Version 0.9.0, in testing. NEXUS has been built and tested on a real Windows 11 PC (Intel Core i5-14400F, NVIDIA RTX 5060,
+Version 0.9.0, in testing ([test builds](https://github.com/fryskii/Nexus/releases)). NEXUS has been built and tested on a real Windows 11 PC (Intel Core i5-14400F, NVIDIA RTX 5060,
 Windows 11 Home 26200), and every push is built and tested on Windows and Linux by CI: unit tests, elevated security tests
 (25 of 25 pass, none skipped), a collector benchmark, a UI stress run and fuzzing.
 
@@ -30,10 +30,11 @@ details and raw data in [docs/BENCHMARKS.md](docs/BENCHMARKS.md)):
 These are results from one machine. Two of NEXUS's own targets are not met yet: working set (goal under 40 MB) and
 process enumeration time (goal under 2 ms).
 
-The smoke tests on that PC covered Processes, Performance, Details, Services, Startup apps, Users, Network, Storage and System
-diagnostics. Still to test there: process actions (priority, affinity, suspend, dumps, wait chains), settings and Windows
-integration (start with Windows, tray, mini monitor, Task Manager replacement), the installer, and display scaling.
-See [PROGRESS.md](PROGRESS.md).
+The smoke tests on that PC covered Processes (including the process actions: efficiency mode, priority, affinity, suspend,
+dumps and wait chains), Performance, Details, Services, Startup apps, Users, Network, Storage and System diagnostics, and a
+30-minute stress run. Still to test there: settings and Windows integration (start with Windows, tray, mini monitor, Task
+Manager replacement), the installer, and display scaling. See [PROGRESS.md](PROGRESS.md) and the
+[release checklist](docs/RELEASE_CHECKLIST.md).
 
 ## Sections
 
@@ -61,10 +62,19 @@ Also included:
 
 ## Download / install
 
+Download the latest build from the [Releases page](https://github.com/fryskii/Nexus/releases). Test builds are not
+code-signed yet, so Windows SmartScreen warns before the first start (*More info › Run anyway*).
+
 - **Installer**: `NEXUS-<version>-setup-x64.exe` adds Start-menu and optional desktop shortcuts, an uninstaller, and optionally sets NEXUS as the Task Manager replacement.
 - **Portable**: unzip `NEXUS-<version>-portable-x64.zip` and run `NEXUS.exe`. The `portable` file next to it keeps settings in that folder.
 
 Requires Windows 10 1809 or later on x64. It is designed for Windows 11.
+
+## Reporting problems
+
+Use the **Bug report** form under Issues. If NEXUS crashed, it saved a report in `%LOCALAPPDATA%\NEXUS\Crashes` and says so
+the next time it starts: attach the newest `.txt` and `.dmp` files. If the whole PC froze or restarted, *Reliability
+Monitor* (Start, type "reliability") shows what Windows recorded at that time.
 
 ## Third-party
 
@@ -80,6 +90,8 @@ Requires Windows 10 1809 or later on x64. It is designed for Windows 11.
 - [Known limitations and unsupported data](docs/LIMITATIONS.md)
 - [Benchmark methodology and results](docs/BENCHMARKS.md)
 - [Architecture](docs/ARCHITECTURE.md)
+- [Changelog](CHANGELOG.md)
+- [Release checklist](docs/RELEASE_CHECKLIST.md)
 - [Development status and continuation plan](PROGRESS.md)
 
 ## License

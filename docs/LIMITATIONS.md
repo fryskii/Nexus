@@ -67,7 +67,9 @@ dialogs) are native and fully accessible. Everything is reachable by keyboard.
 
 ## Verification status
 
-NEXUS was developed in a Linux environment by cross-compiling with MinGW-w64. It was exercised under Wine with a virtual display, where every page,
-the process inspector, search, sorting, the mini monitor, the tray, dark mode and benchmark mode work. Wine does not implement many Windows performance
-counters, GPU, storage and ETW interfaces, so those code paths compile against the real Windows SDK headers but **have not yet been run on real
-Windows 11 hardware**. The MSVC build has not been compiled in this environment either. See [PROGRESS.md](../PROGRESS.md) for the validation plan.
+NEXUS was first developed in a Linux environment by cross-compiling with MinGW-w64 and exercised under Wine. Since then it has been built with
+MSVC and tested on Windows by CI on every push (unit tests, elevated security tests, a collector benchmark and a UI stress run), and tested on a real
+Windows 11 PC (Intel Core i5-14400F, NVIDIA RTX 5060): the Processes, Performance, Details, Services, Startup apps, Network, Storage and System
+diagnostics pages, the process actions, the PDH, GPU, NVMe and ETW code paths, a benchmark against Task Manager and a 30-minute stress run. Not
+verified yet: settings and Windows integration (start with Windows, tray, mini monitor, Task Manager replacement), the installer, display scaling
+above 100%, multi-monitor setups, SATA SMART, multi-user sessions and screen readers. See [PROGRESS.md](../PROGRESS.md).

@@ -140,7 +140,14 @@ NEXUS.exe --bench [out.json] [iterations]   # headless collection benchmark
 NEXUS.exe --version
 ```
 
+## Reporting problems
+
+Use the **Bug report** form under Issues on GitHub. If NEXUS crashes, it saves a report in `%LOCALAPPDATA%\NEXUS\Crashes` (the newest 10 are kept)
+and says so the next time it starts. Attach the newest `.txt` and `.dmp` files: the `.txt` names the error and where it happened, the `.dmp` holds the
+threads' stacks and part of NEXUS's memory (such as process names and command lines), so share it only if you are comfortable with that. If the whole PC
+froze or restarted, *Reliability Monitor* (Start, type "reliability") shows what Windows recorded at that time.
+
 ## Uninstall
 
 Use *Settings › Apps* or the Start-menu uninstaller. The uninstaller removes the Task Manager replacement, but only if it points at NEXUS, and the per-user
-autostart entry. It can optionally remove your settings and recordings.
+autostart entry. It can optionally remove your settings, recordings and crash reports.
