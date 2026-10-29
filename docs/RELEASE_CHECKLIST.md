@@ -11,7 +11,7 @@ or a setup we do not have. Status details are in [PROGRESS.md](../PROGRESS.md).
 - [x] Soak test (6 hours, 2026-10-29): found and fixed a leak when opening inspector windows and a deadlock when NEXUS
       closes *(Claude)*
 - [ ] Repeat the soak with those fixes, ideally overnight *(Claude, PC left alone)*
-- [ ] Publish 0.9.0-alpha.3 with the two fixes *(Claude, after your OK)*
+- [x] Publish 0.9.0-alpha.3 with the two fixes (2026-10-29) *(Claude)*
 - [x] Crash reports: a dump and a summary in `%LOCALAPPDATA%\NEXUS\Crashes`, mentioned at the next start *(Claude)*
 
 ## Testing on real Windows

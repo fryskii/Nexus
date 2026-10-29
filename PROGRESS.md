@@ -84,10 +84,10 @@ Tested on an i5-14400F / RTX 5060 / Windows 11 Home 26200 PC, built natively wit
 - **Smoke-test parts 1–3 done** (ticked below), with fixes for: widget-ID collisions, insights cards,
   invisible text colours, layout overlaps, frame pacing, slow re-sort, the hidden elevated-helper
   confirmation, worker starvation, boxed/fitted headers and horizontal table scrolling.
-- **Test builds:** v0.9.0-alpha.1 (2026-10-28) and v0.9.0-alpha.2 (2026-10-29: the freeze fix,
-  crash reports and the rest below), GitHub pre-releases built by CI from `v*` tags (notes in
-  docs/RELEASE_NOTES.md, history in CHANGELOG.md). The alpha.2 download was checked: checksums match
-  and NEXUS.exe carries the 0.9.0-alpha.2 label.
+- **Test builds:** v0.9.0-alpha.1 (2026-10-28), v0.9.0-alpha.2 (2026-10-29: the freeze fix, crash
+  reports and the rest below) and v0.9.0-alpha.3 (2026-10-29: the inspector-window leak and the hang
+  on exit), GitHub pre-releases built by CI from `v*` tags (notes in docs/RELEASE_NOTES.md, history in
+  CHANGELOG.md). Each download was checked: checksums match and NEXUS.exe (3.7 MB) carries its label.
 - **Smoke-test part 4 done** on a copy of PING.EXE run from %TEMP% (System32 binaries count as
   Windows processes, which are refused Efficiency mode by design), each result confirmed outside
   NEXUS: efficiency mode on (EcoQoS + Idle) and off, Below normal priority, affinity to CPUs 0-1,
@@ -100,7 +100,7 @@ Tested on an i5-14400F / RTX 5060 / Windows 11 Home 26200 PC, built natively wit
   2026-10-29 fixes; settings/integration (persistence, portable, start with Windows, tray, mini
   monitor, Task Manager replacement); installer (CI builds it: test the release's setup.exe,
   including installing over a running NEXUS); DPI/light theme; repeat the soak with the leak and
-  deadlock fixes (overnight); publish alpha.3 with them (needs Jason's OK).
+  deadlock fixes (overnight).
 - **Fixed 2026-10-29, not yet clicked through in the UI:** a bar under the process list explains
   the Network column's "—" without admin and offers Restart as administrator (× hides it,
   `processes.netHint`); changing a service start type, toggling an all-users startup app and the
@@ -139,6 +139,9 @@ Tested on an i5-14400F / RTX 5060 / Windows 11 Home 26200 PC, built natively wit
   NEXUS's own window while the UI thread joined the sampler (shown by NEXUS's own wait-chain
   analysis); those titles are now read with a timeout. Both fixes were tested against the old
   code; details in docs/STRESS_TESTING.md.
+- **Small follow-up:** nexus_security_tests leaves %TEMP%\nexus-security-tests behind (fixture
+  folders and two files; each test already removes its links). Removing the root at the end needs a
+  delete that never follows links.
 
 ## Validation plan (next session on Windows 11)
 

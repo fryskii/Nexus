@@ -5,7 +5,7 @@
 A native Windows 11 task manager and system monitor written in C++20 on Win32, Direct2D and DirectWrite.
 It aims to cover everything Task Manager does, show much more detail, and use few resources.
 
-- **No runtime dependencies**: one statically linked `NEXUS.exe` (about 4.3 MB, including the Inter font), no .NET, no Electron, no drivers, no services.
+- **No runtime dependencies**: one statically linked `NEXUS.exe` (about 3.7 MB, including the Inter font), no .NET, no Electron, no drivers, no services.
 - **Least privilege**: runs as a standard user. It elevates only when you ask, either by restarting as administrator or through a one-off
   elevated helper for single actions such as starting a service or toggling a machine-wide startup entry.
 - **No telemetry**: NEXUS makes no network connections of its own.
