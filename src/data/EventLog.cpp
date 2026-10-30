@@ -17,6 +17,43 @@ struct EvtH {
     EvtH& operator=(const EvtH&) = delete;
 };
 
+// The next batch of a query's results; false at the end (ERROR_NO_MORE_ITEMS) or on failure. On a slow
+// disk the service can take longer than the timeout to reach the next match. A call that times out
+// leaves the query where it got to, so only a minute without progress ends it (ERROR_TIMEOUT).
+bool NextBatch(EVT_HANDLE q, EVT_HANDLE* evs, DWORD size, DWORD& got) {
+    for (int waits = 0; waits < 30; ++waits) {
+        got = 0;
+        if (EvtNext(q, size, evs, 2000, 0, &got)) {
+            if (got) return true;
+            SetLastError(ERROR_NO_MORE_ITEMS);
+            return false;
+        }
+        if (GetLastError() != ERROR_TIMEOUT) return false;
+    }
+    return false;
+}
+
+// Provider, ID, level and time of an event, rendered into e with a context from SystemContext().
+EVT_HANDLE SystemContext() {
+    const wchar_t* paths[] = {L"Event/System/Provider/@Name", L"Event/System/EventID", L"Event/System/Level", L"Event/System/TimeCreated/@SystemTime"};
+    return EvtCreateRenderContext(4, paths, EvtRenderContextValues);
+}
+
+bool RenderSystem(EVT_HANDLE ctx, EVT_HANDLE ev, std::vector<uint8_t>& buf, EventEntry& e) {
+    DWORD used = 0, props = 0;
+    if (!EvtRender(ctx, ev, EvtRenderEventValues, static_cast<DWORD>(buf.size()), buf.data(), &used, &props)) {
+        if (GetLastError() != ERROR_INSUFFICIENT_BUFFER) return false;
+        buf.resize(used);
+        if (!EvtRender(ctx, ev, EvtRenderEventValues, static_cast<DWORD>(buf.size()), buf.data(), &used, &props)) return false;
+    }
+    auto* v = reinterpret_cast<EVT_VARIANT*>(buf.data());
+    e.provider = v[0].Type == EvtVarTypeString && v[0].StringVal ? v[0].StringVal : L"";
+    e.id = v[1].Type == EvtVarTypeUInt16 ? v[1].UInt16Val : 0;
+    e.level = v[2].Type == EvtVarTypeByte ? v[2].ByteVal : 0;
+    e.time = v[3].Type == EvtVarTypeFileTime ? v[3].FileTimeVal : 0;
+    return true;
+}
+
 std::wstring FormatMsg(EVT_HANDLE publisher, EVT_HANDLE ev) {
     DWORD used = 0;
     EvtFormatMessage(publisher, ev, 0, 0, nullptr, EvtFormatMessageEvent, 0, nullptr, &used);
@@ -65,32 +102,21 @@ std::vector<EventEntry> QueryEvents(const wchar_t* channel, const wchar_t* xpath
     std::vector<EventEntry> out;
     EvtH q(EvtQuery(nullptr, channel, xpath, EvtQueryChannelPath | EvtQueryReverseDirection));
     if (!q.h) return out;
-    const wchar_t* sysPaths[] = {L"Event/System/Provider/@Name", L"Event/System/EventID", L"Event/System/Level", L"Event/System/TimeCreated/@SystemTime"};
-    EvtH sysCtx(EvtCreateRenderContext(4, sysPaths, EvtRenderContextValues));
+    EvtH sysCtx(SystemContext());
     EvtH userCtx(EvtCreateRenderContext(0, nullptr, EvtRenderContextUser));
     std::unordered_map<std::wstring, EVT_HANDLE> publishers;
     std::vector<uint8_t> buf(8192);
-    while (out.size() < max) {
-        EVT_HANDLE evs[32];
-        DWORD got = 0;
-        if (!EvtNext(q.h, 32, evs, 2000, 0, &got) || !got) break;
+    EVT_HANDLE evs[32];
+    DWORD got = 0;
+    while (out.size() < max && NextBatch(q.h, evs, 32, got)) {
         for (DWORD i = 0; i < got; ++i) {
             EvtH ev(evs[i]);
             if (out.size() >= max) continue;
             EventEntry e;
             e.channel = channel;
-            DWORD used = 0, props = 0;
-            if (!EvtRender(sysCtx.h, ev.h, EvtRenderEventValues, static_cast<DWORD>(buf.size()), buf.data(), &used, &props)) {
-                if (GetLastError() != ERROR_INSUFFICIENT_BUFFER) continue;
-                buf.resize(used);
-                if (!EvtRender(sysCtx.h, ev.h, EvtRenderEventValues, static_cast<DWORD>(buf.size()), buf.data(), &used, &props)) continue;
-            }
-            auto* v = reinterpret_cast<EVT_VARIANT*>(buf.data());
-            if (v[0].Type == EvtVarTypeString && v[0].StringVal) e.provider = v[0].StringVal;
-            e.id = v[1].Type == EvtVarTypeUInt16 ? v[1].UInt16Val : 0;
-            e.level = v[2].Type == EvtVarTypeByte ? v[2].ByteVal : 0;
-            e.time = v[3].Type == EvtVarTypeFileTime ? v[3].FileTimeVal : 0;
+            if (!RenderSystem(sysCtx.h, ev.h, buf, e)) continue;
             // EventData values (positional).
+            DWORD used = 0, props = 0;
             std::vector<uint8_t> ub(4096);
             if (!EvtRender(userCtx.h, ev.h, EvtRenderEventValues, static_cast<DWORD>(ub.size()), ub.data(), &used, &props) &&
                 GetLastError() == ERROR_INSUFFICIENT_BUFFER && used < (1 << 20)) {
@@ -112,18 +138,24 @@ std::vector<EventEntry> QueryEvents(const wchar_t* channel, const wchar_t* xpath
     return out;
 }
 
-int CountEvents(const wchar_t* channel, const wchar_t* xpath, int cap) {
-    EvtH q(EvtQuery(nullptr, channel, xpath, EvtQueryChannelPath | EvtQueryReverseDirection));
-    if (!q.h) return -1;
-    int n = 0;
-    while (n < cap) {
-        EVT_HANDLE evs[64];
-        DWORD got = 0;
-        if (!EvtNext(q.h, 64, evs, 2000, 0, &got) || !got) break;
-        for (DWORD i = 0; i < got; ++i) EvtClose(evs[i]);
-        n += static_cast<int>(got);
+bool ScanEvents(const wchar_t* channel, const wchar_t* xpath, const std::function<bool(const EventEntry&)>& fn) {
+    EvtH ctx(SystemContext());
+    EvtH q(ctx.h ? EvtQuery(nullptr, channel, xpath, EvtQueryChannelPath | EvtQueryReverseDirection) : nullptr);
+    if (!q.h) return false;
+    std::vector<uint8_t> buf(8192);
+    EventEntry e;
+    e.channel = channel;
+    EVT_HANDLE evs[64];
+    DWORD got = 0;
+    for (;;) {
+        if (!NextBatch(q.h, evs, 64, got)) return GetLastError() == ERROR_NO_MORE_ITEMS;
+        bool more = true;
+        for (DWORD i = 0; i < got; ++i) {
+            EvtH ev(evs[i]);
+            if (more && RenderSystem(ctx.h, ev.h, buf, e)) more = fn(e);
+        }
+        if (!more) return true;
     }
-    return n;
 }
 
 } // namespace nx

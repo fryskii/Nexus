@@ -133,8 +133,9 @@ public:
         int crashes24h = -1, kernelPower30d = -1, whea30d = -1, errors24h = -1;
         std::vector<std::wstring> kernelPowerTimes; // local times of the most recent Kernel-Power 41 events
         bool loading = false, loaded = false;
+        uint64_t time = 0; // GetTickCount64() when the last read finished
     } events;
-    void EnsureEventCounts();
+    void EnsureEventCounts(bool now = false); // now: skip the wait after launch (the counts are on screen)
 
     void Navigate(PageId id);
     PageId Current() const { return current_; }
@@ -238,6 +239,7 @@ private:
     std::vector<HistoryPoint> sessionHistory_;
     std::vector<DiagAlert> alerts_;
     uint64_t lastDiag_ = 0;
+    uint64_t started_ = GetTickCount64();
     StaticInfo static_;
     std::unique_ptr<Page> pages_[static_cast<int>(PageId::Count)];
     PageId current_ = PageId::Processes;

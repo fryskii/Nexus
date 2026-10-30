@@ -410,6 +410,31 @@ static void TestDiagnostics() {
     CHECK(a3.size() == 1 && a3[0].evidence.back().rfind(L"Most recent: 2026-10-27 21:45:10", 0) == 0);
 }
 
+// The event-log counts come from one newest-first pass per log, which ends after a run of events older than its window.
+static void TestEventLogTally() {
+    const uint64_t hour = 36000000000ull, day = 24 * hour, now = 134000000000000000ull;
+    EventLogTally t;
+    CHECK(t.AddSystem(L"Microsoft-Windows-Kernel-Power", 41, 1, now - 2 * hour, now)); // a shutdown, also a critical event today
+    CHECK(t.AddSystem(L"Service Control Manager", 7000, 2, now - 3 * hour, now));     // an error today
+    CHECK(t.AddSystem(L"Microsoft-Windows-WHEA-Logger", 47, 3, now - 2 * day, now));  // a WHEA warning
+    for (uint64_t d = 3; d <= 8; ++d) CHECK(t.AddSystem(L"Microsoft-Windows-Kernel-Power", 41, 1, now - d * day, now));
+    // A clock that was wrong at boot dates a few events years back; the pass carries on past them.
+    for (int i = 0; i < 20; ++i) CHECK(t.AddSystem(L"Microsoft-Windows-Kernel-General", 12, 4, now - 1000 * day, now));
+    CHECK(t.AddSystem(L"microsoft-windows-whea-logger", 1, 2, now - 29 * day, now));
+    int older = 0;
+    while (older < 1000 && t.AddSystem(L"Microsoft-Windows-Kernel-Power", 41, 1, now - 31 * day, now)) ++older;
+    CHECK(older > 20 && older < 1000);
+    CHECK(t.kernelPower30d == 7 && t.whea30d == 2 && t.errors24h == 2);
+    CHECK(t.kernelPowerTimes.size() == 5 && t.kernelPowerTimes.front() == now - 2 * hour && t.kernelPowerTimes.back() == now - 6 * day);
+    CHECK(t.AddApplication(1000, now - hour, now));
+    CHECK(t.AddApplication(1001, now - 2 * hour, now)); // not a crash or a hang
+    CHECK(t.AddApplication(1002, now - 23 * hour, now));
+    CHECK(t.AddApplication(1000, now + hour, now));     // dated in the future: counts as new
+    older = 0;
+    while (older < 1000 && t.AddApplication(1000, now - 25 * hour, now)) ++older;
+    CHECK(t.crashes24h == 3 && older > 0 && older < 1000);
+}
+
 int main() {
     TestFormat();
     TestSettings();
@@ -420,6 +445,7 @@ int main() {
     TestGreeting();
     TestSmbios();
     TestDiagnostics();
+    TestEventLogTally();
     std::printf("%d passed, %d failed\n", g_passed, g_failed);
     return g_failed ? 1 : 0;
 }

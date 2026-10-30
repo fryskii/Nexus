@@ -45,7 +45,7 @@ public:
         app.EnsureSystemInfo();
         app.EnsureGpuInfo();
         app.EnsureDiskInfo(true);
-        app.EnsureEventCounts();
+        app.EnsureEventCounts(true);
         app.RefreshDiagnosticsNow();
     }
     std::wstring AccessibleSummary() const override {

@@ -257,7 +257,8 @@ void App::ExportReport() {
     EnsureSystemInfo();
     EnsureGpuInfo();
     EnsureDiskInfo(true);
-    if (!static_.sysLoaded || !static_.gpusLoaded || !static_.disksLoaded) {
+    EnsureEventCounts(true);
+    if (!static_.sysLoaded || !static_.gpusLoaded || !static_.disksLoaded || !events.loaded) {
         ShowStatus(L"Collecting system information for the report... try again in a moment.");
         return;
     }

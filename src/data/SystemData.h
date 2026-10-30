@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -56,7 +57,9 @@ struct EventEntry {
     std::vector<std::wstring> data; // EventData values in order
 };
 std::vector<EventEntry> QueryEvents(const wchar_t* channel, const wchar_t* xpath, size_t max, bool formatMessage);
-int CountEvents(const wchar_t* channel, const wchar_t* xpath, int cap);
+// Calls fn with each matching event, newest first, with only the provider, ID, level and time filled in.
+// Stops when fn returns false. False if the log could not be read.
+bool ScanEvents(const wchar_t* channel, const wchar_t* xpath, const std::function<bool(const EventEntry&)>& fn);
 const wchar_t* EventLevelName(uint8_t level);
 
 // ---- Drivers ----

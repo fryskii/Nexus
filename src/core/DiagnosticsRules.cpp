@@ -299,4 +299,32 @@ std::vector<DiagAlert> EvaluateDiagnostics(const DiagInput& in) {
     return out;
 }
 
+namespace {
+constexpr uint64_t kDay = 864000000000ull; // in FILETIME units (100 ns)
+constexpr int kOlderRun = 200;             // events in a row older than the window that end a pass
+// An event dated in the future (the clock was changed) counts as new.
+uint64_t Age(uint64_t time, uint64_t now) { return now > time ? now - time : 0; }
+} // namespace
+
+bool EventLogTally::AddSystem(const std::wstring& provider, uint32_t id, uint8_t level, uint64_t time, uint64_t now) {
+    uint64_t age = Age(time, now);
+    if (age > 30 * kDay) return ++systemOlder_ < kOlderRun;
+    systemOlder_ = 0;
+    std::wstring p = ToLower(provider);
+    if (p == L"microsoft-windows-kernel-power" && id == 41) {
+        ++kernelPower30d;
+        if (kernelPowerTimes.size() < 5) kernelPowerTimes.push_back(time);
+    }
+    if (p == L"microsoft-windows-whea-logger") ++whea30d;
+    if ((level == 1 || level == 2) && age <= kDay) ++errors24h;
+    return true;
+}
+
+bool EventLogTally::AddApplication(uint32_t id, uint64_t time, uint64_t now) {
+    if (Age(time, now) > kDay) return ++applicationOlder_ < kOlderRun;
+    applicationOlder_ = 0;
+    if (id == 1000 || id == 1002) ++crashes24h;
+    return true;
+}
+
 } // namespace nx

@@ -851,37 +851,43 @@ void App::EnsureNicInfo(bool force) {
     });
 }
 
-void App::EnsureEventCounts() {
-    if (events.loading || (events.loaded && GetTickCount64() - lastDiag_ < 600000 && events.crashes24h >= 0)) return;
+void App::EnsureEventCounts(bool now) {
+    if (events.loading) return;
+    uint64_t tick = GetTickCount64();
     if (events.loaded) {
-        static uint64_t last = 0;
-        if (GetTickCount64() - last < 600000) return; // refresh every 10 minutes
-        last = GetTickCount64();
+        // Read once per session; a log that could not be read is tried again every 10 minutes.
+        if ((events.crashes24h >= 0 && events.kernelPower30d >= 0) || tick - events.time < 600000) return;
+    } else if (!now && tick - started_ < 60000) {
+        return; // the first read waits a minute after launch, when the disk is less busy
     }
     events.loading = true;
-    auto out = std::make_shared<std::array<int, 4>>();
-    auto shutdowns = std::make_shared<std::vector<std::wstring>>();
+    struct Scan {
+        EventLogTally tally;
+        bool system = false, application = false;
+    };
+    auto out = std::make_shared<Scan>();
     // On a thread of its own: event-log queries can take many seconds on a busy disk.
-    worker::RunLong([out, shutdowns] {
-        const wchar_t* kernelPower41 = L"*[System[Provider[@Name='Microsoft-Windows-Kernel-Power'] and EventID=41 and TimeCreated[timediff(@SystemTime) <= 2592000000]]]";
-        (*out)[0] = CountEvents(L"Application", L"*[System[(EventID=1000 or EventID=1002) and TimeCreated[timediff(@SystemTime) <= 86400000]]]", 500);
-        (*out)[1] = CountEvents(L"System", kernelPower41, 500);
+    worker::RunLong([out] {
+        uint64_t t = NowFileTime();
+        auto& n = out->tally;
+        out->system = ScanEvents(L"System", EventLogTally::kSystemQuery, [&](const EventEntry& e) { return n.AddSystem(e.provider, e.id, e.level, e.time, t); });
+        out->application = ScanEvents(L"Application", EventLogTally::kApplicationQuery, [&](const EventEntry& e) { return n.AddApplication(e.id, e.time, t); });
+    }, [this, out] {
+        const auto& n = out->tally;
+        events.crashes24h = out->application ? n.crashes24h : -1;
+        events.kernelPower30d = out->system ? n.kernelPower30d : -1;
+        events.whea30d = out->system ? n.whea30d : -1;
+        events.errors24h = out->system ? n.errors24h : -1;
         // When they happened, so the alert is not mistaken for something that just occurred.
-        for (auto& e : QueryEvents(L"System", kernelPower41, 5, false)) {
-            FILETIME utc{static_cast<DWORD>(e.time), static_cast<DWORD>(e.time >> 32)}, local;
-            if (e.time && FileTimeToLocalFileTime(&utc, &local)) shutdowns->push_back(FormatFileTime(FileTimeToU64(local)));
+        events.kernelPowerTimes.clear();
+        for (uint64_t t : n.kernelPowerTimes) {
+            FILETIME utc{static_cast<DWORD>(t), static_cast<DWORD>(t >> 32)}, local;
+            if (t && FileTimeToLocalFileTime(&utc, &local)) events.kernelPowerTimes.push_back(FormatFileTime(FileTimeToU64(local)));
         }
-        (*out)[2] = CountEvents(L"System", L"*[System[Provider[@Name='Microsoft-Windows-WHEA-Logger'] and TimeCreated[timediff(@SystemTime) <= 2592000000]]]", 500);
-        (*out)[3] = CountEvents(L"System", L"*[System[(Level=1 or Level=2) and TimeCreated[timediff(@SystemTime) <= 86400000]]]", 1000);
-    }, [this, out, shutdowns] {
-        events.crashes24h = (*out)[0];
-        events.kernelPower30d = (*out)[1];
-        events.kernelPowerTimes = std::move(*shutdowns);
-        events.whea30d = (*out)[2];
-        events.errors24h = (*out)[3];
         events.loaded = true;
         events.loading = false;
-        Invalidate();
+        events.time = GetTickCount64();
+        RefreshDiagnosticsNow(); // the findings use the counts
     });
 }
 
