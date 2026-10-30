@@ -6,7 +6,14 @@ or a setup we do not have. Status details are in [PROGRESS.md](../PROGRESS.md).
 ## Stability
 
 - [ ] A tester's "crashed my computer" report (Dell Latitude 7410): get his answers (whole PC or only NEXUS, shutdown
-      dates) and have him try the build with the freeze fix *(tester)*
+      dates, the lockup on closing, setup or zip, what keeps his disk at 100%) and have him try the latest build *(tester)*
+- [x] Lighter event-log check at startup for that tester's busy disk: one pass per log, a minute after launch
+      (2026-10-30) *(Claude)*
+- [ ] Publish 0.9.0-alpha.4 with that change, after CI saves a symbols file with each release so crash reports can be
+      read *(Claude, with your OK for the tag)*
+- [ ] Task Manager replacement while NEXUS is hung: Ctrl+Shift+Esc opens nothing today. Offer to end the hung NEXUS or
+      open Windows Task Manager *(Claude)*
+- [ ] A regression test for the hang on exit *(Claude)*
 - [x] Publish 0.9.0-alpha.2 with the freeze fix (2026-10-29) *(Claude)*
 - [x] Soak test (6 hours, 2026-10-29): found and fixed a leak when opening inspector windows and a deadlock when NEXUS
       closes *(Claude)*
@@ -17,7 +24,8 @@ or a setup we do not have. Status details are in [PROGRESS.md](../PROGRESS.md).
 ## Testing on real Windows
 
 - [ ] Click-test the 2026-10-29 fixes: service startup type, all-users startup app and Task Manager switch no longer
-      freeze the window while the UAC prompt is open; the "Restart as administrator" bar; the crash-report notice *(you)*
+      freeze the window while the UAC prompt is open; the "Restart as administrator" bar; the crash-report notice; and
+      from 2026-10-30, Export report in NEXUS's first minute asks to try again, then includes the event-log counts *(you)*
 - [ ] Settings survive a restart; portable mode; start with Windows; tray; mini monitor; Replace Task Manager on and off
       *(you + Claude)*
 - [ ] Installer: install, install again while NEXUS is running, uninstall leaves no files or registry entries

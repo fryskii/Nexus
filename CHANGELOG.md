@@ -2,6 +2,18 @@
 
 Test builds are on the [Releases page](https://github.com/fryskii/Nexus/releases).
 
+## Unreleased
+
+Changed
+- The crash, unexpected-shutdown and hardware-error checks read each event log once, newest first, and stop at the edge of
+  their time window instead of reading whole logs (the System log four times over). They start a minute after launch
+  rather than straight away, or as soon as System diagnostics is opened or a report is exported (which now waits for
+  them). On a test PC, Windows read 4.1 MB from its log files for them instead of 17.8 MB.
+
+Fixed
+- On a slow disk, the crash, shutdown and error counts and the Events and Crashes lists could stop short: when the event
+  log took more than 2 seconds to return the next events, NEXUS took that as the end.
+
 ## 0.9.0-alpha.3 (2026-10-29)
 
 Fixed

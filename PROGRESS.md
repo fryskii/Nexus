@@ -73,7 +73,7 @@ redirection (SafeWriteGuard); history folder confined to the profile when elevat
 administrators; pointer-free window messages; bounded cross-process reads. To do on Windows: run
 `nexus_security_tests.exe` elevated (junction, symlink and ACL checks are skipped under Wine).
 
-## Where we left off (2026-10-28 and 29, first sessions on a real Windows 11 PC)
+## Where we left off (2026-10-28 to 30, first sessions on a real Windows 11 PC)
 
 Tested on an i5-14400F / RTX 5060 / Windows 11 Home 26200 PC, built natively with WinLibs MinGW-w64
 (no Visual Studio on that PC: `cmake -S . -B build-mingw -G Ninja -DCMAKE_BUILD_TYPE=Release`,
@@ -96,11 +96,14 @@ Tested on an i5-14400F / RTX 5060 / Windows 11 Home 26200 PC, built natively wit
   (requested streams, all memory, unique file names); a dump of csrss.exe is refused without
   leaving a file; wait chains found mutex and critical-section deadlocks and a process wait in
   about 0.3 s each, also on a suspended process.
-- **Next** (also in docs/RELEASE_CHECKLIST.md): the tester's answers (below); click-test the
-  2026-10-29 fixes; settings/integration (persistence, portable, start with Windows, tray, mini
-  monitor, Task Manager replacement); installer (CI builds it: test the release's setup.exe,
-  including installing over a running NEXUS); DPI/light theme; repeat the soak with the leak and
-  deadlock fixes (overnight).
+- **Next** (also in docs/RELEASE_CHECKLIST.md), in this order: alpha.4 with the 2026-10-30
+  event-log change, after CI saves a symbols file with each release (release builds are stripped,
+  so a crash report's `NEXUS.exe+0x…` cannot be read today); the tester's answers (below);
+  click-test the 2026-10-29 fixes and Export report in NEXUS's first minute; settings/integration
+  (persistence, portable, start with Windows, tray, mini monitor, Task Manager replacement) and the
+  installer (CI builds it: test the release's setup.exe, including installing over a running NEXUS
+  and its Installed apps entry); Task Manager replacement while NEXUS is hung (below); repeat the
+  soak with the leak and deadlock fixes (overnight); DPI, light theme and a screen reader.
 - **Fixed 2026-10-29, not yet clicked through in the UI:** a bar under the process list explains
   the Network column's "—" without admin and offers Restart as administrator (× hides it,
   `processes.netHint`); changing a service start type, toggling an all-users startup app and the
@@ -122,6 +125,23 @@ Tested on an i5-14400F / RTX 5060 / Windows 11 Home 26200 PC, built natively wit
   Kernel-Power 41 events. The Crashes tab query took 25+ s on that disk; event-log queries (Crashes
   and Events tabs, crash and shutdown counts) now run on `worker::RunLong` threads, so a slow disk no
   longer holds up the two shared workers.
+- **2026-10-30, the tester on alpha.3:** NEXUS itself seemed fine, but the PC locked up as soon as he
+  closed it; NEXUS is not in Installed apps or %LOCALAPPDATA% (expected for the portable zip;
+  %LOCALAPPDATA%\NEXUS only appears for crash reports or recorded history, and the setup registers
+  under HKLM Uninstall); and on his laptop NEXUS seems to keep the disk at 100%. Measured here (test
+  copy, idle stress mode, not elevated): once running, NEXUS reads and writes nothing on any page
+  tried. Its only disk load was the startup event-log check: five queries (four full passes over the
+  System log) that made the Event Log service read 17.8 MB. Changed to one pass per log, newest
+  first, ending at the edge of the window (`EventLogTally` in DiagnosticsRules: each query also
+  matches every older event, so the pass can stop there, and the service reads only as far as
+  asked), first run a minute after launch (straight away on the Diagnostics page or for a report):
+  4.1 MB, read 60 s after launch, same counts. Also fixed: an `EvtNext` timeout (2 s) counted as the
+  end of the results, so on a slow disk the counts and the Events and Crashes lists could stop short
+  (`NextBatch` in EventLog.cpp, tested with 1 ms timeouts). Asked for: setup or zip, whether the
+  lockup recovers, Reliability Monitor, a Ctrl+E report, and with the disk at 100% Task Manager
+  sorted by Disk, Resource Monitor's Disk tab and Performance › Memory (pagefile.sys at the top would
+  mean paging, .evtx files the startup check). If the lockup on closing happens again, log each
+  closing step so his next report shows where it stops.
 - **Also on 2026-10-29:** crash reports (`src/app/CrashReport.cpp`: unhandled exceptions,
   std::terminate and C runtime errors write a minidump and a summary to %LOCALAPPDATA%\NEXUS\Crashes
   from a thread of their own, newest 10 kept, mentioned at the next start; tested with real
@@ -142,6 +162,13 @@ Tested on an i5-14400F / RTX 5060 / Windows 11 Home 26200 PC, built natively wit
 - **Small follow-up:** nexus_security_tests leaves %TEMP%\nexus-security-tests behind (fixture
   folders and two files; each test already removes its links). Removing the root at the end needs a
   delete that never follows links.
+- **Found 2026-10-30, not fixed:** with Task Manager replacement on, a hung NEXUS leaves
+  Ctrl+Shift+Esc doing nothing: the new instance finds the single-instance mutex, posts
+  `WM_NX_ACTIVATE` to the hung window and exits (src/main.cpp). It should notice the hung window and
+  offer to end it or open Windows Task Manager (the IFEO entry sends a plain taskmgr.exe launch back
+  to NEXUS, so that needs a way around it). Also to do: a regression test for the hang on exit (the
+  test that forced it was a throwaway program), and the "Current state" section at the top predates
+  the Windows sessions (it still lists the MSVC build and the benchmarks as not done).
 
 ## Validation plan (next session on Windows 11)
 
