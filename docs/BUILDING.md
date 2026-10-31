@@ -49,7 +49,11 @@ sudo apt install cmake ninja-build g++-mingw-w64-x86-64-posix nsis zip
 ```
 
 Options:
-- `-DNEXUS_STRIP=OFF` keeps symbols, which is useful with `x86_64-w64-mingw32-addr2line`.
+- By default the debug information of `NEXUS.exe` is saved to `NEXUS.debug` next to it before it is stripped
+  (`-DNEXUS_SPLIT_DEBUG=OFF` skips that). Releases ship it as `NEXUS-<version>-symbols-x64.zip`. To name the
+  `NEXUS.exe+0x…` offsets in a crash report: `python scripts/symbolize.py NEXUS.debug NEXUS-….txt` (needs MinGW-w64
+  `addr2line` and `nm` on PATH, or `--addr2line PATH`). Only the `NEXUS.debug` of the same build gives the right names.
+- `-DNEXUS_STRIP=OFF` keeps symbols in `NEXUS.exe` itself.
 - `-DNEXUS_BUILD_TESTS=OFF` skips the unit tests.
 
 ## Unit tests

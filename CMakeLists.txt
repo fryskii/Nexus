@@ -7,6 +7,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(NEXUS_BUILD_TESTS "Build unit tests" ON)
 option(NEXUS_STRIP "Strip symbols from release binaries (MinGW)" ON)
+# MinGW: build NEXUS.exe with debug information and move it into NEXUS.debug next to it before
+# stripping, so the offsets in a crash report (NEXUS.exe+0x...) can be turned into functions and
+# source lines (scripts/symbolize.py). -g does not change the generated code.
+option(NEXUS_SPLIT_DEBUG "Save debug information to NEXUS.debug before stripping (MinGW)" ON)
 
 # Static C runtime everywhere (no VC++ redistributable needed; all targets must match to link).
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
@@ -148,10 +152,19 @@ if(WIN32)
   else()
     target_compile_options(nexus PRIVATE -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers
       -Wno-cast-function-type -municode)
-    target_link_options(nexus PRIVATE -municode -static -static-libgcc -static-libstdc++ $<$<BOOL:${NEXUS_STRIP}>:-s>)
+    if(NEXUS_STRIP AND NEXUS_SPLIT_DEBUG AND CMAKE_OBJCOPY)
+      target_compile_options(nexus PRIVATE -g)
+      target_link_options(nexus PRIVATE -municode -static -static-libgcc -static-libstdc++)
+      add_custom_command(TARGET nexus POST_BUILD
+        COMMAND "${CMAKE_OBJCOPY}" --only-keep-debug "$<TARGET_FILE:nexus>" "$<TARGET_FILE_DIR:nexus>/NEXUS.debug"
+        COMMAND "${CMAKE_OBJCOPY}" --strip-all "$<TARGET_FILE:nexus>"
+        VERBATIM)
+    else()
+      target_link_options(nexus PRIVATE -municode -static -static-libgcc -static-libstdc++ $<$<BOOL:${NEXUS_STRIP}>:-s>)
+    endif()
     # GNU ld < 2.42 does not set the PE load-config directory, so point it at _load_config_used
     # (DependentLoadFlags = System32 only; see src/app/LoadConfig.cpp). Required: without it,
-    # DLLs planted next to NEXUS.exe would be loaded.
+    # DLLs planted next to NEXUS.exe would be loaded. Runs after stripping, on the final file.
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
     add_custom_command(TARGET nexus POST_BUILD
       COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/cmake/pe_load_config.py" "$<TARGET_FILE:nexus>"

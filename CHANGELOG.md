@@ -4,6 +4,11 @@ Test builds are on the [Releases page](https://github.com/fryskii/Nexus/releases
 
 ## Unreleased
 
+Added
+- Crash reports list the crashed thread's call stack, and each release comes with a symbols file
+  (`NEXUS-<version>-symbols-x64.zip`) that `scripts/symbolize.py` uses to turn the report into function names and source
+  lines.
+
 Changed
 - The crash, unexpected-shutdown and hardware-error checks read each event log once, newest first, and stop at the edge of
   their time window instead of reading whole logs (the System log four times over). They start a minute after launch

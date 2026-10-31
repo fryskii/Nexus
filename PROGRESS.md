@@ -96,9 +96,20 @@ Tested on an i5-14400F / RTX 5060 / Windows 11 Home 26200 PC, built natively wit
   (requested streams, all memory, unique file names); a dump of csrss.exe is refused without
   leaving a file; wait chains found mutex and critical-section deadlocks and a process wait in
   about 0.3 s each, also on a suspended process.
+- **Symbols for crash reports (2026-10-31):** MinGW builds compile NEXUS.exe with `-g`, move the
+  debug information into `NEXUS.debug` and strip the exe (`NEXUS_SPLIT_DEBUG`; same sections and
+  addresses as before, load-config step after the strip); `package.sh` zips it as
+  `NEXUS-<version>-symbols-x64.zip`, which the release job uploads with the rest. Crash summaries
+  now list the crashed thread's call stack (`StackTrace` in CrashReport.cpp: x64 unwind tables,
+  every stack read checked, stops after 3 frames outside any module), written after the summary so
+  a damaged stack cannot cost it; `scripts/symbolize.py` names the frames (addr2line, nm for the
+  runtime libraries). Tested with a throwaway program: access violation (main and other thread),
+  call through a bad pointer, uncaught C++ exception, stack overflow, and from a vectored handler a
+  stack overwritten with junk and a junk frame register (no fault, report written). Found: when a
+  stack is that damaged, Windows ends the process without calling NEXUS's unhandled-exception
+  filter, so no NEXUS report is written (Windows Error Reporting still records it); unchanged.
 - **Next** (also in docs/RELEASE_CHECKLIST.md), in this order: alpha.4 with the 2026-10-30
-  event-log change, after CI saves a symbols file with each release (release builds are stripped,
-  so a crash report's `NEXUS.exe+0x…` cannot be read today); the tester's answers (below);
+  event-log change and the crash-report symbols; the tester's answers (below);
   click-test the 2026-10-29 fixes and Export report in NEXUS's first minute; settings/integration
   (persistence, portable, start with Windows, tray, mini monitor, Task Manager replacement) and the
   installer (CI builds it: test the release's setup.exe, including installing over a running NEXUS

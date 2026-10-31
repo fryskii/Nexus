@@ -25,6 +25,13 @@ printf 'This file makes NEXUS store its settings in this folder (portable mode).
 (cd "$DIST" && zip -qr "NEXUS-$VERSION-portable-x64.zip" "NEXUS-$VERSION-portable-x64")
 
 makensis -V2 -DVERSION="$VERSION" -DVERSION_NUMBER="$VERSION_NUMBER" -DSRCDIR="$BUILD" -DOUTFILE="$DIST/NEXUS-$VERSION-setup-x64.exe" "$ROOT/installer/nexus.nsi"
+# Debug information of this exact NEXUS.exe, to name the offsets in crash reports (scripts/symbolize.py).
+if [[ -f "$BUILD/NEXUS.debug" ]]; then
+  S="$DIST/NEXUS-$VERSION-symbols-x64"
+  mkdir -p "$S"
+  cp "$BUILD/NEXUS.debug" "$ROOT/scripts/symbolize.py" "$S/"
+  (cd "$DIST" && zip -qr "NEXUS-$VERSION-symbols-x64.zip" "NEXUS-$VERSION-symbols-x64")
+fi
 (cd "$DIST" && sha256sum NEXUS-*.zip NEXUS-*-setup-x64.exe > SHA256SUMS.txt)
 echo "Artifacts in $DIST:"
 ls -la "$DIST"

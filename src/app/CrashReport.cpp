@@ -61,6 +61,82 @@ void Prune(const std::wstring& folder) {
     }
 }
 
+// "NEXUS.exe+0x1234": the module's file name only (its path can contain the user's name).
+std::string Where(uintptr_t address, bool* inModule = nullptr) {
+    if (inModule) *inModule = false;
+    std::wstring module = L"unknown module";
+    uintptr_t offset = address;
+    HMODULE m = nullptr;
+    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           reinterpret_cast<LPCWSTR>(address), &m)) {
+        wchar_t path[MAX_PATH];
+        DWORD n = GetModuleFileNameW(m, path, MAX_PATH);
+        module = FileNameOf(std::wstring(path, n));
+        offset -= reinterpret_cast<uintptr_t>(m);
+        if (inModule) *inModule = true;
+    }
+    char b[300];
+    std::snprintf(b, sizeof b, "%s+0x%llX", ToUtf8(module).c_str(), static_cast<unsigned long long>(offset));
+    return b;
+}
+
+// True when [address, address + size) is committed, readable memory of the allocation `base` (the
+// crashed thread's stack), so unwinding never reads outside that stack.
+bool InStack(uintptr_t address, size_t size, void* base) {
+    MEMORY_BASIC_INFORMATION mbi;
+    if (!VirtualQuery(reinterpret_cast<void*>(address), &mbi, sizeof mbi)) return false;
+    constexpr DWORD kReadable = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE;
+    return mbi.State == MEM_COMMIT && (mbi.Protect & kReadable) && !(mbi.Protect & PAGE_GUARD) && mbi.AllocationBase == base &&
+           address + size <= reinterpret_cast<uintptr_t>(mbi.BaseAddress) + mbi.RegionSize;
+}
+
+// The crashed thread's call stack, one "#n module+offset" line per frame, unwound from the
+// exception context with the modules' own unwind tables (x64 .pdata). Frame #0 is where the
+// exception happened; later frames are return addresses (scripts/symbolize.py allows for that).
+std::string StackTrace(const CONTEXT* context) {
+    std::string s;
+#if defined(_M_X64) || defined(__x86_64__)
+    if (!context) return s;
+    CONTEXT c = *context;
+    MEMORY_BASIC_INFORMATION mbi;
+    if (!VirtualQuery(reinterpret_cast<void*>(c.Rsp), &mbi, sizeof mbi)) return s;
+    void* stack = mbi.AllocationBase;
+    int outside = 0; // frames in a row outside every module: past a few, the stack is damaged
+    for (int i = 0; i < 64 && c.Rip; ++i) {
+        char b[340];
+        bool inModule = false;
+        std::snprintf(b, sizeof b, "  #%d %s\r\n", i, Where(c.Rip, &inModule).c_str());
+        s += b;
+        outside = inModule ? 0 : outside + 1;
+        if (outside >= 3) {
+            s += "  (the rest of the stack is damaged)\r\n";
+            break;
+        }
+        DWORD64 prevRsp = c.Rsp, imageBase = 0;
+        // A frame needs at least its return address on the stack; the unwinder reads only within
+        // the frame described by the module's tables, which lies between Rsp and the caller's Rsp.
+        if (!InStack(c.Rsp, 8, stack)) break;
+        PRUNTIME_FUNCTION fn = RtlLookupFunctionEntry(c.Rip, &imageBase, nullptr);
+        if (fn) {
+            // A function with a frame register (UNWIND_INFO byte 3, low 4 bits) is unwound through
+            // that register, so it must point into the stack too. CONTEXT keeps Rax..R15 in x64
+            // register-number order, as the unwinder indexes them.
+            unsigned frameReg = reinterpret_cast<const BYTE*>(imageBase + fn->UnwindData)[3] & 0x0F;
+            if (frameReg && !InStack((&c.Rax)[frameReg], 8, stack)) break;
+            void* handlerData = nullptr;
+            DWORD64 establisher = 0;
+            RtlVirtualUnwind(UNW_FLAG_NHANDLER, imageBase, c.Rip, fn, &c, &handlerData, &establisher, nullptr);
+        } else {
+            // A leaf function, or a call to a bad address: the return address is on top of the stack.
+            c.Rip = *reinterpret_cast<const DWORD64*>(c.Rsp);
+            c.Rsp += 8;
+        }
+        if (c.Rsp <= prevRsp || !InStack(c.Rsp - 8, 8, stack)) break; // stacks grow down: callers sit higher
+    }
+#endif
+    return s;
+}
+
 std::string Summary(EXCEPTION_POINTERS* ep, DWORD threadId) {
     char b[512];
     SYSTEMTIME st;
@@ -70,24 +146,13 @@ std::string Summary(EXCEPTION_POINTERS* ep, DWORD threadId) {
     std::string s = b;
     if (ep && ep->ExceptionRecord) {
         const EXCEPTION_RECORD& er = *ep->ExceptionRecord;
-        // The module's file name only: its path can contain the user's name.
-        std::wstring module = L"unknown module";
-        uintptr_t offset = reinterpret_cast<uintptr_t>(er.ExceptionAddress);
-        HMODULE m = nullptr;
-        if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                               static_cast<LPCWSTR>(er.ExceptionAddress), &m)) {
-            wchar_t path[MAX_PATH];
-            DWORD n = GetModuleFileNameW(m, path, MAX_PATH);
-            module = FileNameOf(std::wstring(path, n));
-            offset -= reinterpret_cast<uintptr_t>(m);
-        }
         const char* kind = er.ExceptionCode == kUncaughtCppException   ? " (uncaught C++ exception)"
                            : er.ExceptionCode == kCrtError             ? " (C runtime error)"
                            : er.ExceptionCode == EXCEPTION_ACCESS_VIOLATION ? " (access violation)"
                            : er.ExceptionCode == EXCEPTION_STACK_OVERFLOW   ? " (stack overflow)"
                                                                            : "";
-        std::snprintf(b, sizeof b, "Exception 0x%08lX%s at %s+0x%llX.\r\n", static_cast<unsigned long>(er.ExceptionCode), kind, ToUtf8(module).c_str(),
-                      static_cast<unsigned long long>(offset));
+        std::snprintf(b, sizeof b, "Exception 0x%08lX%s at %s.\r\n", static_cast<unsigned long>(er.ExceptionCode), kind,
+                      Where(reinterpret_cast<uintptr_t>(er.ExceptionAddress)).c_str());
         s += b;
         if (er.ExceptionCode == EXCEPTION_ACCESS_VIOLATION && er.NumberParameters >= 2) {
             ULONG_PTR op = er.ExceptionInformation[0];
@@ -135,6 +200,14 @@ DWORD WINAPI WriteFiles(void* p) {
     Handle f(CreateNew(guard, base + L".txt"));
     DWORD written = 0;
     if (f && WriteFile(f.Get(), text.data(), static_cast<DWORD>(text.size()), &written, nullptr)) job.summary = base + L".txt";
+    // Added after the summary is on disk: a stack too damaged to unwind cannot cost the rest.
+    if (f && job.ep && job.ep->ContextRecord) {
+        std::string stack = StackTrace(job.ep->ContextRecord);
+        if (!stack.empty()) {
+            stack = "Call stack (newest first; scripts/symbolize.py with the release's NEXUS.debug names them):\r\n" + stack;
+            WriteFile(f.Get(), stack.data(), static_cast<DWORD>(stack.size()), &written, nullptr);
+        }
+    }
     return 0;
 }
 

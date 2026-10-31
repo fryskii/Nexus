@@ -9,8 +9,9 @@ or a setup we do not have. Status details are in [PROGRESS.md](../PROGRESS.md).
       dates, the lockup on closing, setup or zip, what keeps his disk at 100%) and have him try the latest build *(tester)*
 - [x] Lighter event-log check at startup for that tester's busy disk: one pass per log, a minute after launch
       (2026-10-30) *(Claude)*
-- [ ] Publish 0.9.0-alpha.4 with that change, after CI saves a symbols file with each release so crash reports can be
-      read *(Claude, with your OK for the tag)*
+- [x] Symbols for crash reports: each release gets `NEXUS-<version>-symbols-x64.zip` (NEXUS.debug), crash summaries
+      list the call stack, and `scripts/symbolize.py` names the frames (2026-10-31) *(Claude)*
+- [ ] Publish 0.9.0-alpha.4 with those changes *(Claude, with your OK for the tag)*
 - [ ] Task Manager replacement while NEXUS is hung: Ctrl+Shift+Esc opens nothing today. Offer to end the hung NEXUS or
       open Windows Task Manager *(Claude)*
 - [ ] A regression test for the hang on exit *(Claude)*
