@@ -92,7 +92,8 @@ Tested on an i5-14400F / RTX 5060 / Windows 11 Home 26200 PC, built natively wit
   reports and the rest below), v0.9.0-alpha.3 (2026-10-29: the inspector-window leak and the hang
   on exit) and v0.9.0-alpha.4 (2026-10-31: the lighter event-log check, crash-report symbols and
   call stacks, the hung-NEXUS handling), GitHub pre-releases built by CI from `v*` tags (notes in docs/RELEASE_NOTES.md, history in
-  CHANGELOG.md). Each download was checked: checksums match and NEXUS.exe (3.7 MB) carries its label.
+  CHANGELOG.md). Each download was checked: checksums match and NEXUS.exe (3.7 MB; 3.9 MB from
+  alpha.4) carries its label; for alpha.4 also that the symbols zip's NEXUS.debug matches the exe.
 - **Smoke-test part 4 done** on a copy of PING.EXE run from %TEMP% (System32 binaries count as
   Windows processes, which are refused Efficiency mode by design), each result confirmed outside
   NEXUS: efficiency mode on (EcoQoS + Idle) and off, Below normal priority, affinity to CPUs 0-1,
