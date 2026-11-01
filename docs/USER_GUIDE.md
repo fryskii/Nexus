@@ -26,8 +26,9 @@ Ctrl+B collapses the sidebar.
   followed by your first name from your Windows account. Change the name or turn it off in Settings → Appearance → Greeting.
 - **Font**: NEXUS uses Inter, which is built into `NEXUS.exe` and loaded privately (nothing is installed on the system).
   Switch to Segoe UI in Settings → Appearance → Font.
-- **Style**: Settings → Appearance → Style → *Simple* gives a plain, flat look close to Windows Task Manager (no glows,
-  gradients, tinted cards or icon tiles; it also switches the font to Segoe UI). *NEXUS* is the default, layered look.
+- **Style**: Settings → Appearance → Style → *Simple* gives a plain, flat look laid out like Windows Task Manager (no glows,
+  gradients or icon tiles, no insights panel, one plain process list, tighter rows; it also switches the font to Segoe UI).
+  *NEXUS* is the default, layered look; Simple is only used when you choose it.
 - **Background color**: Settings → Appearance → Background color, with presets or any color from the "+" button (the
   Windows color picker). It works with both styles. NEXUS uses light text on dark colors and dark text on light ones, so the
   Theme setting is set aside while a background color is chosen; picking a theme (or *A*, automatic) returns to the default.

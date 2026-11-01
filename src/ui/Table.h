@@ -68,7 +68,7 @@ public:
     int SelectedRow(const TableSource& src) const;
     void SelectRow(size_t row, const TableSource& src);
     void EnsureVisibleNext() { ensureVisible_ = true; }
-    float RowHeight() const { return compact ? 27.f : 34.f; }
+    float RowHeight() const { return simple_ ? (compact ? 24.f : 28.f) : compact ? 27.f : 34.f; }
     int ColumnIndex(const std::string& key) const;
     const std::string& SortKey() const;
 
@@ -76,6 +76,7 @@ public:
     void LoadLayout(const std::wstring& s);
 
 private:
+    bool simple_ = false; // Simple style (from the theme at the last Draw): one plain list, tighter rows
     void DrawImpl(Ui& ui, const Rect& r, TableSource& src);
     bool HasPills() const;
     float MinWidth(Gfx& g, const TableColumn& c, bool sorted, bool tall); // narrowest width at which the header title still fits

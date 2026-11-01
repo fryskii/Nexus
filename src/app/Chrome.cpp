@@ -17,7 +17,8 @@ constexpr Color kCloseRed = Color::Hex(0xC42B1C);
 
 bool App::InsightsVisible(float windowWidth) const {
     const Page* p = pages_[static_cast<int>(current_)].get();
-    return p && p->ShowsInsights() && settings_.GetBool("ui.insights", true) && windowWidth >= 1060.f;
+    // The Simple style has no insights rail (Task Manager has none); the list gets the full width.
+    return p && p->ShowsInsights() && !theme_.simple && settings_.GetBool("ui.insights", true) && windowWidth >= 1060.f;
 }
 
 void App::ToggleInsights() {
@@ -40,8 +41,8 @@ void App::Paint() {
     const float W = gfx_.Width(), H = gfx_.Height();
     DrawBackground(W, H);
 
-    const float m = 12.f;
-    float navW = navCollapsed_ ? 64.f : 232.f;
+    const float m = theme_.simple ? 8.f : 12.f;
+    float navW = navCollapsed_ ? 64.f : theme_.simple ? 200.f : 232.f;
     Rect nav{m, titleH_, navW, H - titleH_ - m};
     bool rail = InsightsVisible(W);
     float railW = rail ? std::clamp(W * 0.23f, 286.f, 330.f) : 0.f;
@@ -79,7 +80,7 @@ void App::Paint() {
     gfx_.Line(content.x + 16, content.y + 0.5f, content.R() - 16, content.y + 0.5f, theme_.panelHighlight);
     gfx_.StrokeRound(content, 16.f, theme_.panelBorder);
     Page* page = pages_[static_cast<int>(current_)].get();
-    Rect header{content.x + 20, content.y + 8, content.w - 36, 56};
+    Rect header = theme_.simple ? Rect{content.x + 16, content.y + 6, content.w - 28, 44} : Rect{content.x + 20, content.y + 8, content.w - 36, 56};
     DrawHeader(ui, header);
     Rect body{content.x + 14, header.B() + 2, content.w - 28, content.B() - header.B() - 14};
     gfx_.PushClip({content.x + 1, header.B(), content.w - 2, content.B() - header.B() - 1});
@@ -125,7 +126,8 @@ void App::DrawBackground(float W, float H) {
 void App::DrawTitleBar(Ui& ui, Rect r) {
     Gfx& g = gfx_;
     const Theme& t = theme_;
-    g.Logo({20, 13, 26, 26}, t.accent.Mix(Color{1, 1, 1, 1}, 0.15f), Color::Hex(0x7C3AED));
+    if (t.simple) g.Logo({20, 15, 22, 22}, Color::Hex(0x6B6B6B), Color::Hex(0x6B6B6B)); // plain grey
+    else g.Logo({20, 13, 26, 26}, t.accent.Mix(Color{1, 1, 1, 1}, 0.15f), Color::Hex(0x7C3AED));
     g.Text(L"NEXUS", {56, 0, 120, r.h}, Font::BodySemi, t.text);
     if (elevated_) ui.Badge({112, r.h / 2 - 10, 96, 20}, L"Administrator", t.warning.Alpha(0.16f), t.warning);
     const float bw = 46.f, bh = 34.f, top = 9.f;
@@ -168,7 +170,8 @@ void App::DrawCaptionButtons(Rect) {
 void App::DrawNav(Ui& ui, Rect r) {
     Gfx& g = gfx_;
     const Theme& t = theme_;
-    float itemH = compact_ ? 40.f : 46.f, gap = compact_ ? 3.f : 5.f;
+    float itemH = t.simple ? (compact_ ? 32.f : 36.f) : compact_ ? 40.f : 46.f;
+    float gap = t.simple ? 2.f : compact_ ? 3.f : 5.f;
     Rect list{r.x, r.y + 4, r.w, r.h - itemH - 16};
     float contentH = 0;
     for (const auto& e : kNavEntries)
@@ -192,8 +195,9 @@ void App::DrawNav(Ui& ui, Rect r) {
             g.FillRound(ir, 12.f, t.surfaceHover);
         }
         Color fg = sel && !t.simple ? (t.dark ? Color{1, 1, 1, 1} : t.accentText) : t.text;
-        g.Glyph(e.glyph, {ir.x + 12, ir.y, 28, ir.h}, Font::IconLarge, fg);
-        if (!navCollapsed_) g.Text(e.name, {ir.x + 52, ir.y, ir.w - 56, ir.h}, sel ? Font::BodySemi : Font::Body, fg);
+        g.Glyph(e.glyph, {ir.x + 12, ir.y, 28, ir.h}, t.simple ? Font::Icon : Font::IconLarge, fg);
+        float tx = t.simple ? 46.f : 52.f;
+        if (!navCollapsed_) g.Text(e.name, {ir.x + tx, ir.y, ir.w - tx - 4, ir.h}, sel && !t.simple ? Font::BodySemi : Font::Body, fg);
         else ui.Tooltip(id, e.name);
         if (ui.Clicked(id)) Navigate(e.id);
         if (ui.RightClicked(id) && e.id != PageId::Settings) {
@@ -244,10 +248,11 @@ void App::DrawHeader(Ui& ui, Rect r) {
     Gfx& g = gfx_;
     const Theme& t = theme_;
     Page* page = pages_[static_cast<int>(current_)].get();
-    float titleW = g.Measure(page->Title(), Font::Title) + 4;
+    const Font titleFont = t.simple ? Font::Subtitle : Font::Title;
+    float titleW = g.Measure(page->Title(), titleFont) + 4;
     narrowHeader_ = r.w < 700.f;
-    g.Text(page->Title(), {r.x, r.y, titleW + 10, r.h}, Font::Title, t.text);
-    const float bh = 40.f, by = r.y + (r.h - bh) / 2;
+    g.Text(page->Title(), {r.x, r.y, titleW + 10, r.h}, titleFont, t.text);
+    const float bh = t.simple ? 32.f : 40.f, by = r.y + (r.h - bh) / 2;
     float right = r.R();
     right -= 52;
     if (ui.Button(Id("hdr.more"), {right, by, 52, bh}, L"•••", 0)) ui.Defer([this] { OverflowMenu(); });
@@ -256,7 +261,8 @@ void App::DrawHeader(Ui& ui, Rect r) {
     page->HeaderActions(ui, right, by, bh);
     float runW = narrowHeader_ ? 48.f : 160.f;
     right -= runW;
-    if (ui.Button(Id("hdr.run"), {right, by, runW, bh}, narrowHeader_ ? L"" : L"Run new task", 0xF001, ButtonStyle::Accent)) ui.Defer([this] { RunNewTaskDialog(); });
+    if (ui.Button(Id("hdr.run"), {right, by, runW, bh}, narrowHeader_ ? L"" : L"Run new task", 0xF001, t.simple ? ButtonStyle::Standard : ButtonStyle::Accent))
+        ui.Defer([this] { RunNewTaskDialog(); });
     if (narrowHeader_) ui.Tooltip(Id("hdr.run"), L"Run new task (Ctrl+N)");
     right -= 16;
     Rect extras{r.x + titleW + 20, r.y, right - (r.x + titleW + 20), r.h};
@@ -282,7 +288,8 @@ void App::OverflowMenu() {
                  {14, L"Very low (4 s)", ms == 4000, true, false, true}};
     std::vector<MenuItem> items = {{1, paused ? L"Resume updates\tCtrl+P" : L"Pause updates\tCtrl+P"}, {2, L"Refresh now\tF5"}, speed, MenuItem::Sep(),
                                    {3, L"Always on top\tCtrl+T", top}, {4, L"Mini monitor\tCtrl+M", MiniMonitorVisible()},
-                                   {5, L"Insights panel", settings_.GetBool("ui.insights", true), pages_[static_cast<int>(current_)]->ShowsInsights()},
+                                   {5, theme_.simple ? L"Insights panel (not in the Simple style)" : L"Insights panel", settings_.GetBool("ui.insights", true) && !theme_.simple,
+                                    pages_[static_cast<int>(current_)]->ShowsInsights() && !theme_.simple},
                                    {6, L"Compact mode", compact_}, MenuItem::Sep()};
     std::vector<MenuItem> pageItems;
     pages_[static_cast<int>(current_)]->PageMenu(pageItems);

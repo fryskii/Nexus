@@ -393,6 +393,7 @@ void App::ApplyTheme() {
                               Gfx::TextFamily().c_str());
     if (search_) SendMessageW(search_, WM_SETFONT, reinterpret_cast<WPARAM>(searchFont_), TRUE);
     if (mini_) mini_->OnThemeChanged();
+    UpdateDemand(); // the Simple style has no insights rail, which needs extra data
     Invalidate();
 }
 

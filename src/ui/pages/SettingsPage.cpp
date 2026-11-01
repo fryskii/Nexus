@@ -36,8 +36,9 @@ public:
         {
             bool simple = cfg.GetString("ui.style", L"nexus") == L"simple";
             Rect c = Row(ui, x, w, L"Style",
-                         L"NEXUS: glowing, layered design. Simple: plain and flat, close to Windows Task Manager (no glows, gradients or "
-                         L"icon tiles). Choosing Simple also switches the font to Segoe UI; you can change it back below.");
+                         L"NEXUS (default): glowing, layered design. Simple: plain and flat, laid out like Windows Task Manager: no glows "
+                         L"or gradients, no insights panel, one plain process list and tighter rows. Choosing Simple also switches the "
+                         L"font to Segoe UI; you can change it back below.");
             int ns = ui.Tabs(Id("set.style"), {c.R() - 200, c.y + (c.h - 32) / 2, 200, 32}, {L"NEXUS", L"Simple"}, simple ? 1 : 0);
             if (ns >= 0 && (ns == 1) != simple) {
                 cfg.SetString("ui.style", ns == 1 ? L"simple" : L"nexus");

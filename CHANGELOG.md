@@ -5,8 +5,9 @@ Test builds are on the [Releases page](https://github.com/fryskii/Nexus/releases
 ## Unreleased
 
 Added
-- Settings → Appearance → Style: *Simple* draws NEXUS plain and flat, close to Windows Task Manager: solid background, no
-  glows, gradients or icon tiles, small corners, plain table header cells and Task Manager's yellow usage cells. It also
+- Settings → Appearance → Style: *Simple* (off by default) draws NEXUS plain and flat and laid out like Windows Task
+  Manager: solid background, no glows, gradients or icon tiles, no insights panel, one plain process list with tighter
+  rows and Task Manager's yellow usage cells, a smaller sidebar and page header, plain buttons and a grey logo. It also
   switches the font to Segoe UI (changeable). Applies to the main window, the process inspector and the mini monitor.
 - Settings → Appearance → Background color: presets or any color (Windows color picker), in either style. NEXUS picks light
   or dark text by whichever has more contrast on that color; choosing a theme returns to the default background.

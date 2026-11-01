@@ -170,9 +170,10 @@ void Table::Draw(Ui& ui, const Rect& r, TableSource& src) {
 void Table::DrawImpl(Ui& ui, const Rect& r, TableSource& src) {
     Gfx& g = ui.g;
     const Theme& t = ui.t;
+    simple_ = t.simple;
     bool pills = HasPills();
-    const float headerH = columns.empty() ? 0 : (pills ? 66.f : 36.f);
-    const float gap = 8.f;
+    const float headerH = columns.empty() ? 0 : simple_ ? (pills ? 50.f : 30.f) : (pills ? 66.f : 36.f);
+    const float gap = simple_ ? 0.f : 8.f;
     const float rowH = RowHeight();
     Rect header{r.x, r.y, r.w, headerH};
     Rect body{r.x, r.y + headerH + gap, r.w, r.h - headerH - gap};
@@ -210,8 +211,12 @@ void Table::DrawImpl(Ui& ui, const Rect& r, TableSource& src) {
     };
 
     // ---------------- Header ----------------
-    g.FillRound(header, 12.f, t.panel);
-    g.StrokeRound(header, 12.f, t.panelBorder);
+    if (simple_) {
+        g.Line(header.x, header.B() - 0.5f, header.R(), header.B() - 0.5f, t.divider);
+    } else {
+        g.FillRound(header, 12.f, t.panel);
+        g.StrokeRound(header, 12.f, t.panelBorder);
+    }
     g.PushClip(header);
     float x = r.x + pad;
     for (size_t di = 0; di < order_.size(); ++di) {
@@ -343,6 +348,7 @@ void Table::DrawImpl(Ui& ui, const Rect& r, TableSource& src) {
             panels.push_back({i, n});
         }
     }
+    if (simple_) panels.clear(); // one plain list, like Task Manager
     for (auto& [a, b] : panels) {
         float top = rowY(a) + (a ? 3.f : 0.f), bottom = rowY(b) - 3.f;
         if (bottom < body.y || top > body.B()) continue;
@@ -365,7 +371,7 @@ void Table::DrawImpl(Ui& ui, const Rect& r, TableSource& src) {
             float cy = y + rowH / 2 + 2;
             if (hot) g.FillRound(rr.Inset(2, 4), 8.f, t.hover);
             g.Chevron(r.x + pad + 14, cy, 8.f, open, t.textSecondary, 1.5f);
-            g.Text(label, {r.x + pad + 34, y + 2, r.w - 60, rowH}, Font::Subtitle, t.text);
+            g.Text(label, {r.x + pad + 34, y + 2, r.w - 60, rowH}, simple_ ? Font::BodySemi : Font::Subtitle, t.text);
             if (ui.Clicked(rid)) src.ToggleExpand(row);
             continue;
         }
@@ -392,7 +398,10 @@ void Table::DrawImpl(Ui& ui, const Rect& r, TableSource& src) {
             if (ci != pinned && !clipped) { g.PushClip({scrollArea.x, body.y, scrollArea.w, body.h}); clipped = true; }
             if (heatMap && c.heat) {
                 float h = src.CellHeat(row, ci);
-                if (h >= 0 && (c.heatAlways || h > 0.02f)) g.FillRound(cr.Inset(3, 3), 7.f, t.Heat(h));
+                if (h >= 0 && (c.heatAlways || h > 0.02f)) {
+                    if (simple_) g.Fill(cr, t.Heat(h)); // whole cell, as in Task Manager
+                    else g.FillRound(cr.Inset(3, 3), 7.f, t.Heat(h));
+                }
             }
             src.CellText(row, ci, cell_);
             Rect tr = cr.Inset(10, 0);
@@ -413,7 +422,7 @@ void Table::DrawImpl(Ui& ui, const Rect& r, TableSource& src) {
                 tr.x += 22;
                 tr.w -= 22;
                 if (showIcons) {
-                    float is = compact ? 18.f : 22.f;
+                    float is = compact || simple_ ? 18.f : 22.f;
                     if (ID2D1Bitmap* icon = src.RowIcon(row)) g.DrawBitmap(icon, {tr.x, y + (rowH - is) / 2, is, is});
                     tr.x += is + 10;
                     tr.w -= is + 10;
