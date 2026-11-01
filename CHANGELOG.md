@@ -2,7 +2,7 @@
 
 Test builds are on the [Releases page](https://github.com/fryskii/Nexus/releases).
 
-## Unreleased
+## 0.9.0-alpha.4 (2026-10-31)
 
 Added
 - Crash reports list the crashed thread's call stack, and each release comes with a symbols file

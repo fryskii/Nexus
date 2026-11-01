@@ -89,8 +89,9 @@ Tested on an i5-14400F / RTX 5060 / Windows 11 Home 26200 PC, built natively wit
   invisible text colours, layout overlaps, frame pacing, slow re-sort, the hidden elevated-helper
   confirmation, worker starvation, boxed/fitted headers and horizontal table scrolling.
 - **Test builds:** v0.9.0-alpha.1 (2026-10-28), v0.9.0-alpha.2 (2026-10-29: the freeze fix, crash
-  reports and the rest below) and v0.9.0-alpha.3 (2026-10-29: the inspector-window leak and the hang
-  on exit), GitHub pre-releases built by CI from `v*` tags (notes in docs/RELEASE_NOTES.md, history in
+  reports and the rest below), v0.9.0-alpha.3 (2026-10-29: the inspector-window leak and the hang
+  on exit) and v0.9.0-alpha.4 (2026-10-31: the lighter event-log check, crash-report symbols and
+  call stacks, the hung-NEXUS handling), GitHub pre-releases built by CI from `v*` tags (notes in docs/RELEASE_NOTES.md, history in
   CHANGELOG.md). Each download was checked: checksums match and NEXUS.exe (3.7 MB) carries its label.
 - **Smoke-test part 4 done** on a copy of PING.EXE run from %TEMP% (System32 binaries count as
   Windows processes, which are refused Efficiency mode by design), each result confirmed outside
@@ -112,8 +113,8 @@ Tested on an i5-14400F / RTX 5060 / Windows 11 Home 26200 PC, built natively wit
   stack overwritten with junk and a junk frame register (no fault, report written). Found: when a
   stack is that damaged, Windows ends the process without calling NEXUS's unhandled-exception
   filter, so no NEXUS report is written (Windows Error Reporting still records it); unchanged.
-- **Next** (also in docs/RELEASE_CHECKLIST.md), in this order: alpha.4 with the 2026-10-30
-  event-log change and the crash-report symbols; the tester's answers (below);
+- **Next** (also in docs/RELEASE_CHECKLIST.md), in this order: the tester tries alpha.4 and
+  answers (below); Ctrl+Shift+Esc with a hung NEXUS for real (replacement on, elevated and not);
   click-test the 2026-10-29 fixes and Export report in NEXUS's first minute; settings/integration
   (persistence, portable, start with Windows, tray, mini monitor, Task Manager replacement) and the
   installer (CI builds it: test the release's setup.exe, including installing over a running NEXUS

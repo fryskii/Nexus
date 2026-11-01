@@ -11,7 +11,7 @@ or a setup we do not have. Status details are in [PROGRESS.md](../PROGRESS.md).
       (2026-10-30) *(Claude)*
 - [x] Symbols for crash reports: each release gets `NEXUS-<version>-symbols-x64.zip` (NEXUS.debug), crash summaries
       list the call stack, and `scripts/symbolize.py` names the frames (2026-10-31) *(Claude)*
-- [ ] Publish 0.9.0-alpha.4 with those changes *(Claude, with your OK for the tag)*
+- [x] Publish 0.9.0-alpha.4 with those changes and the hung-NEXUS handling (2026-10-31) *(Claude)*
 - [x] Task Manager replacement while NEXUS is hung: a second start offers to end the hung NEXUS (after a hang report) or
       open Windows Task Manager (2026-10-31) *(Claude)*
 - [ ] Try it for real: with Replace Task Manager on, Ctrl+Shift+Esc while NEXUS is hung, elevated and not *(you)*
