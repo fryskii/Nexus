@@ -26,10 +26,14 @@
 - StartupApproved writes and the Task Manager (IFEO) replacement
 - efficiency mode, dumps, affinity, wait chains
 
+Since 2026-10-28 NEXUS has also been built and tested on a real Windows 11 PC (see "Where we left off"
+below): CI builds it with MSVC and runs the unit, window and elevated security tests on Windows; the
+benchmark against Task Manager is in docs/BENCHMARKS.md; much of the "not runnable under Wine" list
+above has been checked on real hardware (the smoke-test checklist below says what).
+
 **Not yet done:**
 
-- The MSVC build has not been compiled; `scripts/build.ps1` and CI are untested.
-- Benchmarks against Task Manager on real hardware (see docs/BENCHMARKS.md).
+- `scripts/build.ps1` with Visual Studio on a PC (CI covers the MSVC build itself).
 - The feature-parity audit against an installed Task Manager build.
 - Remaining parity gaps listed in docs/FEATURE_PARITY.md.
 
@@ -170,16 +174,29 @@ Tested on an i5-14400F / RTX 5060 / Windows 11 Home 26200 PC, built natively wit
   NEXUS's own window while the UI thread joined the sampler (shown by NEXUS's own wait-chain
   analysis); those titles are now read with a timeout. Both fixes were tested against the old
   code; details in docs/STRESS_TESTING.md.
-- **Small follow-up:** nexus_security_tests leaves %TEMP%\nexus-security-tests behind (fixture
-  folders and two files; each test already removes its links). Removing the root at the end needs a
-  delete that never follows links.
-- **Found 2026-10-30, not fixed:** with Task Manager replacement on, a hung NEXUS leaves
-  Ctrl+Shift+Esc doing nothing: the new instance finds the single-instance mutex, posts
-  `WM_NX_ACTIVATE` to the hung window and exits (src/main.cpp). It should notice the hung window and
-  offer to end it or open Windows Task Manager (the IFEO entry sends a plain taskmgr.exe launch back
-  to NEXUS, so that needs a way around it). Also to do: a regression test for the hang on exit (the
-  test that forced it was a throwaway program), and the "Current state" section at the top predates
-  the Windows sessions (it still lists the MSVC build and the benchmarks as not done).
+- **Fixed 2026-10-31:** nexus_security_tests removes %TEMP%\nexus-security-tests at the end with a
+  delete that never follows links (`RemoveTree`; checked here against a junction, a hard link and a
+  read-only file; the elevated run is CI's).
+- **A hung NEXUS and Ctrl+Shift+Esc (fixed 2026-10-31):** a second start used to post
+  `WM_NX_ACTIVATE` to the running NEXUS and exit, so with Task Manager replacement on, a hung NEXUS
+  left Ctrl+Shift+Esc doing nothing. Now (`OnAlreadyRunning` in main.cpp) it waits up to 5 s for the
+  window to answer; if it is hung, or the mutex is held without a window (process ID published in
+  `Local\NEXUS.SingleInstance.Pid`), it asks: end it and start again (after `crash::WriteHangReport`:
+  every thread's call stack read with StackWalk64 and the module's own unwind tables, wait chains,
+  a minidump, as NEXUS-<time>-<pid>-hang in the Crashes folder; the next start says so), open Windows
+  Task Manager, or wait. Windows Task Manager: from an elevated NEXUS, started as a debuggee and
+  released at once, so IFEO does not apply; without elevation, started normally when the
+  replacement is off, else through the elevated `--open-taskmgr` helper (a Task Manager started
+  without elevation by an administrator restarts itself elevated the ordinary way, which IFEO would
+  send back to NEXUS). `WM_NX_ACTIVATE` now also reaches an elevated NEXUS (message filter).
+  Tested with a throwaway harness (the real main.cpp with the dialog stubbed): a responsive NEXUS is
+  activated with no dialog; a suspended one gets the dialog, Cancel leaves it, End writes the report
+  (window thread in `App::Run`, workers in Worker.cpp:56, "suspended" in the wait chains), ends it
+  and starts; the same for a mutex held without a window. Not tested: the elevated paths (no admin
+  prompt here) and a real Ctrl+Shift+Esc with the replacement on.
+- **Regression test for the hang on exit (2026-10-31):** `nexus_window_tests` (CI, no elevation)
+  runs the process collector while a NEXUS-like window's thread is blocked; it fails after 10 s on
+  the old GetWindowText code and passes on the current one.
 
 ## Validation plan (next session on Windows 11)
 

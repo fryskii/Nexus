@@ -68,6 +68,36 @@ bool MakeJunction(const std::wstring& link, const std::wstring& target) {
     return ok != FALSE;
 }
 
+// Deletes a folder tree without following links: a junction or symbolic link inside is removed
+// itself (RemoveDirectory and DeleteFile act on the link), never what it points to; a hard link is
+// one name of a file, so deleting it leaves the file's other names.
+bool RemoveTree(const std::wstring& dir) {
+    DWORD a = GetFileAttributesW(dir.c_str());
+    if (a == INVALID_FILE_ATTRIBUTES) return true;
+    if (!(a & FILE_ATTRIBUTE_DIRECTORY) || (a & FILE_ATTRIBUTE_REPARSE_POINT)) return false;
+    WIN32_FIND_DATAW fd;
+    HANDLE f = FindFirstFileW((dir + L"\\*").c_str(), &fd);
+    if (f != INVALID_HANDLE_VALUE) {
+        do {
+            std::wstring n = fd.cFileName;
+            if (n == L"." || n == L"..") continue;
+            std::wstring p = dir + L"\\" + n;
+            bool isDir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+            if (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+                if (isDir) RemoveDirectoryW(p.c_str());
+                else DeleteFileW(p.c_str());
+            } else if (isDir) {
+                RemoveTree(p);
+            } else {
+                if (fd.dwFileAttributes & FILE_ATTRIBUTE_READONLY) SetFileAttributesW(p.c_str(), FILE_ATTRIBUTE_NORMAL);
+                DeleteFileW(p.c_str());
+            }
+        } while (FindNextFileW(f, &fd));
+        FindClose(f);
+    }
+    return RemoveDirectoryW(dir.c_str()) != FALSE;
+}
+
 std::wstring Fresh(const wchar_t* name) {
     std::wstring d = g_root + L"\\" + name;
     CreateDirectoryW(d.c_str(), nullptr);
@@ -231,6 +261,10 @@ int main() {
     TestSymlinkFile(protectedFile);
     TestPaths();
     TestDumpAcl();
+    // The protected stand-in survived every attack; then the scratch folder goes, links and all.
+    CHECK(ReadAll(protectedFile) == "original");
+    CHECK(RemoveTree(g_root));
+    CHECK(GetFileAttributesW(g_root.c_str()) == INVALID_FILE_ATTRIBUTES);
     std::printf("%d passed, %d failed, %d skipped\n", g_passed, g_failed, g_skipped);
     return g_failed ? 1 : 0;
 }

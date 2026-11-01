@@ -21,4 +21,10 @@ std::wstring WriteReport(EXCEPTION_POINTERS* ep);
 // write time (or `afterFileTime` when there is none).
 std::vector<std::wstring> ReportsAfter(uint64_t afterFileTime, uint64_t* newest = nullptr);
 
+// Report on another NEXUS that stopped responding, saved before it is ended: its wait chains, the
+// call stack of every thread (the window's thread marked) and a minidump, in the same folder as
+// crash reports, named NEXUS-<time>-<pid>-hang. Returns the summary's path (empty on failure).
+std::wstring WriteHangReport(DWORD pid, DWORD windowThreadId);
+bool IsHangReport(const std::wstring& path);
+
 } // namespace nx::crash

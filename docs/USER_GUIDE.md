@@ -117,6 +117,10 @@ All preferences are in Settings and are stored in `%APPDATA%\NEXUS\nexus.ini`, o
 **Replace Task Manager** makes Ctrl+Shift+Esc open NEXUS through the documented Image File Execution Options setting. Turn it off in Settings or
 uninstall NEXUS to restore Task Manager.
 
+If NEXUS is already open but has stopped responding (or is stuck without a window), starting it again, for example with Ctrl+Shift+Esc,
+offers to end the stuck NEXUS and start a new one, or to open Windows Task Manager instead. Before ending it, NEXUS saves a report of where
+it was stuck in `%LOCALAPPDATA%\NEXUS\Crashes`; please attach it to a bug report.
+
 ## Keyboard shortcuts
 
 | Keys | Action |

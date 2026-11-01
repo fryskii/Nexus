@@ -1,3 +1,4 @@
 LIBRARY dbghelp.dll
 EXPORTS
 MiniDumpWriteDump
+StackWalk64

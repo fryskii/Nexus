@@ -12,9 +12,10 @@ or a setup we do not have. Status details are in [PROGRESS.md](../PROGRESS.md).
 - [x] Symbols for crash reports: each release gets `NEXUS-<version>-symbols-x64.zip` (NEXUS.debug), crash summaries
       list the call stack, and `scripts/symbolize.py` names the frames (2026-10-31) *(Claude)*
 - [ ] Publish 0.9.0-alpha.4 with those changes *(Claude, with your OK for the tag)*
-- [ ] Task Manager replacement while NEXUS is hung: Ctrl+Shift+Esc opens nothing today. Offer to end the hung NEXUS or
-      open Windows Task Manager *(Claude)*
-- [ ] A regression test for the hang on exit *(Claude)*
+- [x] Task Manager replacement while NEXUS is hung: a second start offers to end the hung NEXUS (after a hang report) or
+      open Windows Task Manager (2026-10-31) *(Claude)*
+- [ ] Try it for real: with Replace Task Manager on, Ctrl+Shift+Esc while NEXUS is hung, elevated and not *(you)*
+- [x] A regression test for the hang on exit: `nexus_window_tests` in CI (2026-10-31) *(Claude)*
 - [x] Publish 0.9.0-alpha.2 with the freeze fix (2026-10-29) *(Claude)*
 - [x] Soak test (6 hours, 2026-10-29): found and fixed a leak when opening inspector windows and a deadlock when NEXUS
       closes *(Claude)*

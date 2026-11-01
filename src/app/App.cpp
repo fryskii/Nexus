@@ -237,6 +237,9 @@ bool App::Create(int nCmdShow, bool startMinimized) {
     hwnd_ = CreateWindowExW(0, kClassName, title.c_str(), style, CW_USEDEFAULT, CW_USEDEFAULT,
                             1180, 760, nullptr, nullptr, wc.hInstance, this);
     if (!hwnd_) return false;
+    // A second NEXUS started without elevation asks an elevated one to show itself; Windows drops
+    // messages from lower-integrity programs unless they are let through. This one only shows the window.
+    ChangeWindowMessageFilterEx(hwnd_, WM_NX_ACTIVATE, MSGFLT_ALLOW, nullptr);
     // Re-run WM_NCCALCSIZE so the custom title bar replaces the system caption.
     SetWindowPos(hwnd_, nullptr, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     dpi_ = static_cast<float>(GetDpiForWindow(hwnd_));
@@ -334,9 +337,11 @@ bool App::Create(int nCmdShow, bool startMinimized) {
     if (!crashes.empty()) {
         settings_.SetInt("crash.seen", static_cast<int64_t>(newestCrash));
         std::wstring report = crashes.front();
-        deferred_.push_back([this, report] {
-            if (Confirm(L"NEXUS closed unexpectedly",
-                        L"It saved a crash report. If you report the problem, please attach the newest .txt and .dmp files from this folder. "
+        bool hang = crash::IsHangReport(report);
+        deferred_.push_back([this, report, hang] {
+            if (Confirm(hang ? L"The NEXUS that stopped responding was ended" : L"NEXUS closed unexpectedly",
+                        std::wstring(hang ? L"It saved a report of where that NEXUS was stuck. " : L"It saved a crash report. ") +
+                        L"If you report the problem, please attach the newest .txt and .dmp files from this folder. "
                         L"The .dmp file holds part of NEXUS's memory, such as process names and command lines, so share it only with people "
                         L"you trust.\n\n" + crash::Folder(),
                         L"Open folder"))

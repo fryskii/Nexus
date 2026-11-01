@@ -15,7 +15,8 @@ language and show screenshots of UI changes.
   `pages/*Page.cpp` (one per sidebar page), the process inspector window.
 - `src/app/`: `App` (window, message loop), `Chrome.cpp` (title bar, sidebar, header, insights rail),
   `Commands.cpp`, `Stress.cpp`, `LoadConfig.cpp`; `src/main.cpp` (entry point, elevated helpers).
-- `tests/`: `tests.cpp` (unit), `security_tests.cpp` (Windows, elevated), `fuzz/`, `stress/churn.cpp`.
+- `tests/`: `tests.cpp` (unit), `window_tests.cpp` (Windows), `security_tests.cpp` (Windows, elevated), `fuzz/`,
+  `stress/churn.cpp`.
 - `res/`: icon, manifest, embedded Inter font (OFL); `installer/nexus.nsi`; `scripts/`.
 
 ## Build and test on Windows
@@ -26,6 +27,7 @@ From "Developer PowerShell for VS 2022" (needs Visual Studio 2022 with Desktop d
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release --parallel
 .\build\Release\nexus_tests.exe              # unit tests
+.\build\Release\nexus_window_tests.exe       # NEXUS-window/thread interplay (the hang on exit); no elevation
 .\build\Release\nexus_security_tests.exe     # run from an ELEVATED prompt; must say 0 failed, 0 skipped
 .\build\Release\NEXUS.exe                    # the app
 .\build\Release\NEXUS.exe --stress 60 "$env:TEMP\s.csv" 1   # UI stress; writes s.csv.summary.txt
@@ -50,7 +52,7 @@ manual long stress. Keep CI green; MSVC builds with `/W4`, so avoid new warnings
 ## Security rules (see docs/SECURITY.md)
 
 NEXUS can run elevated (restart as admin, or as the Task Manager replacement). Keep these invariants:
-- Elevated helpers in `main.cpp` (`--svc`, `--svc-starttype`, `--startup-set`, `--taskmgr-replace`)
+- Elevated helpers in `main.cpp` (`--svc`, `--svc-starttype`, `--startup-set`, `--taskmgr-replace`, `--open-taskmgr`)
   treat arguments as untrusted: validate against what exists, never accept paths or registry
   locations, confirm risky actions in the elevated window. Build helper command lines with `QuoteArg`.
 - DLLs: `SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32)`; non-KnownDLL imports are delay-loaded

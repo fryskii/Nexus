@@ -52,7 +52,13 @@ so overlapping elements resolve correctly. Mouse button events are processed syn
 ## Security model
 
 - The manifest requests `asInvoker`. Privileged single actions re-launch `NEXUS.exe` with a helper verb through UAC: `--svc`,
-  `--svc-starttype`, `--startup-set`, `--taskmgr-replace`. The helper performs exactly one operation and exits with a Win32 error code.
+  `--svc-starttype`, `--startup-set`, `--taskmgr-replace`, `--open-taskmgr`. The helper performs exactly one operation and exits with a
+  Win32 error code.
+- A second start finds the `Local\NEXUS.SingleInstance` mutex and asks the running NEXUS to show itself (`WM_NX_ACTIVATE`, let
+  through to an elevated NEXUS with `ChangeWindowMessageFilterEx`). If that window is hung, or the mutex is held with no window (the
+  holder publishes its process ID in `Local\NEXUS.SingleInstance.Pid`), it offers to end that NEXUS after a hang report
+  (`crash::WriteHangReport`: every thread's stack, wait chains, a minidump) or to open Windows Task Manager, which from an elevated
+  NEXUS is started as a debuggee and released at once so that the Image File Execution Options redirect does not apply.
 - `SetDefaultDllDirectories(System32 | app dir)` hardens the DLL search order. `HeapEnableTerminationOnCorruption` is enabled.
 - Termination guards:
   - processes are verified by PID plus creation time (no PID-reuse kills);

@@ -29,6 +29,13 @@ jobs:
           $code = $LASTEXITCODE
           Select-String -Path tests.log -Pattern '^FAIL|passed' | ForEach-Object { if ($_.Line -match '^FAIL') { "::error::$($_.Line)" } else { "::notice::unit tests: $($_.Line)" } }
           exit $code
+      - name: Window tests
+        shell: pwsh
+        run: |
+          .\build\Release\nexus_window_tests.exe 2>&1 | Tee-Object -FilePath window.log
+          $code = $LASTEXITCODE
+          Select-String -Path window.log -Pattern '^FAIL|passed' | ForEach-Object { if ($_.Line -match '^FAIL') { "::error::$($_.Line)" } else { "::notice::window tests: $($_.Line)" } }
+          exit $code
       - name: Security tests (elevated)
         shell: pwsh
         run: |

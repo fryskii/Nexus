@@ -2,13 +2,17 @@
 #include "core/Format.h"
 #include "core/SafeFile.h"
 #include "core/Win.h"
+#include "data/ProcessOps.h"
 
 #include <dbghelp.h>
+#include <psapi.h>
 #include <shlobj.h>
+#include <tlhelp32.h>
 
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <exception>
 
 namespace nx::crash {
@@ -247,6 +251,166 @@ void Install(const std::wstring& folder) {
 }
 
 const std::wstring& Folder() { return g_folder; }
+
+namespace {
+// ---- Call stacks of another process (a hung NEXUS) ----
+// dbghelp's StackWalk64 with our own lookups: the unwind tables (.pdata) are read straight from the
+// other process's modules, so dbghelp's symbol engine (which can follow _NT_SYMBOL_PATH to a symbol
+// server, a network connection) is never used.
+struct RemoteModule {
+    uintptr_t base = 0, size = 0;
+    std::wstring name;
+    std::vector<RUNTIME_FUNCTION> functions;
+    bool read = false;
+};
+struct RemoteWalk {
+    std::vector<RemoteModule> modules;
+    RUNTIME_FUNCTION found{};
+};
+thread_local RemoteWalk* t_walk = nullptr;
+
+RemoteModule* RemoteModuleAt(DWORD64 address) {
+    for (RemoteModule& m : t_walk->modules)
+        if (address >= m.base && address - m.base < m.size) return &m;
+    return nullptr;
+}
+
+void ReadFunctionTable(HANDLE process, RemoteModule& m) {
+    m.read = true;
+    BYTE header[4096];
+    SIZE_T got = 0;
+    if (!ReadProcessMemory(process, reinterpret_cast<void*>(m.base), header, sizeof header, &got) || got != sizeof header) return;
+    LONG pe = 0;
+    std::memcpy(&pe, header + 0x3C, sizeof pe);
+    IMAGE_NT_HEADERS64 nt;
+    if (pe < 0 || static_cast<size_t>(pe) + sizeof nt > sizeof header) return;
+    std::memcpy(&nt, header + pe, sizeof nt);
+    if (nt.Signature != IMAGE_NT_SIGNATURE || nt.OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC ||
+        nt.OptionalHeader.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_EXCEPTION)
+        return;
+    IMAGE_DATA_DIRECTORY dir = nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION];
+    size_t count = dir.Size / sizeof(RUNTIME_FUNCTION);
+    if (!dir.VirtualAddress || !count || count > 4'000'000 || static_cast<uintptr_t>(dir.VirtualAddress) + dir.Size > m.size) return;
+    m.functions.resize(count);
+    if (!ReadProcessMemory(process, reinterpret_cast<void*>(m.base + dir.VirtualAddress), m.functions.data(), count * sizeof(RUNTIME_FUNCTION), &got) ||
+        got != count * sizeof(RUNTIME_FUNCTION))
+        m.functions.clear();
+}
+
+PVOID CALLBACK RemoteFunctionTable(HANDLE process, DWORD64 address) {
+    RemoteModule* m = RemoteModuleAt(address);
+    if (!m) return nullptr;
+    if (!m->read) ReadFunctionTable(process, *m);
+    DWORD rva = static_cast<DWORD>(address - m->base);
+    // The table is sorted by start address (a PE requirement).
+    auto it = std::upper_bound(m->functions.begin(), m->functions.end(), rva, [](DWORD v, const RUNTIME_FUNCTION& f) { return v < f.BeginAddress; });
+    if (it == m->functions.begin() || rva >= (--it)->EndAddress) return nullptr;
+    t_walk->found = *it;
+    return &t_walk->found;
+}
+
+DWORD64 CALLBACK RemoteModuleBase(HANDLE, DWORD64 address) {
+    RemoteModule* m = RemoteModuleAt(address);
+    return m ? m->base : 0;
+}
+
+std::string RemoteWhere(DWORD64 address) {
+    RemoteModule* m = RemoteModuleAt(address);
+    char b[300];
+    if (m) std::snprintf(b, sizeof b, "%s+0x%llX", ToUtf8(m->name).c_str(), static_cast<unsigned long long>(address - m->base));
+    else std::snprintf(b, sizeof b, "unknown module+0x%llX", static_cast<unsigned long long>(address));
+    return b;
+}
+
+std::string RemoteThreadStack(HANDLE process, HANDLE thread) {
+    if (SuspendThread(thread) == static_cast<DWORD>(-1)) return "    (could not be paused to read its stack)\r\n";
+    std::string s;
+    alignas(16) CONTEXT c{};
+    c.ContextFlags = CONTEXT_FULL;
+    if (GetThreadContext(thread, &c)) {
+        STACKFRAME64 f{};
+        f.AddrPC = {c.Rip, 0, AddrModeFlat};
+        f.AddrStack = {c.Rsp, 0, AddrModeFlat};
+        f.AddrFrame = {c.Rbp, 0, AddrModeFlat};
+        int outside = 0;
+        for (int i = 0; i < 64 && StackWalk64(IMAGE_FILE_MACHINE_AMD64, process, thread, &f, &c, nullptr, RemoteFunctionTable, RemoteModuleBase, nullptr) &&
+                        f.AddrPC.Offset;
+             ++i) {
+            char b[340];
+            std::snprintf(b, sizeof b, "    #%d %s\r\n", i, RemoteWhere(f.AddrPC.Offset).c_str());
+            s += b;
+            outside = RemoteModuleAt(f.AddrPC.Offset) ? 0 : outside + 1;
+            if (outside >= 3) break;
+        }
+    }
+    ResumeThread(thread);
+    return s.empty() ? "    (no stack read)\r\n" : s;
+}
+
+std::string RemoteStacks(DWORD pid, DWORD windowThreadId) {
+    Handle process(OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid));
+    if (!process) return "Threads: could not be read (error " + std::to_string(GetLastError()) + ").\r\n";
+    RemoteWalk walk;
+    HMODULE mods[1024];
+    DWORD needed = 0;
+    if (EnumProcessModulesEx(process.Get(), mods, sizeof mods, &needed, LIST_MODULES_ALL)) {
+        for (DWORD i = 0; i < std::min<DWORD>(needed / sizeof(HMODULE), 1024); ++i) {
+            MODULEINFO mi{};
+            wchar_t name[MAX_PATH];
+            if (!GetModuleInformation(process.Get(), mods[i], &mi, sizeof mi)) continue;
+            DWORD n = GetModuleBaseNameW(process.Get(), mods[i], name, MAX_PATH);
+            walk.modules.push_back({reinterpret_cast<uintptr_t>(mi.lpBaseOfDll), mi.SizeOfImage, std::wstring(name, n), {}, false});
+        }
+    }
+    t_walk = &walk;
+    std::string s = "Threads (newest frame first; scripts/symbolize.py with the release's NEXUS.debug names them):\r\n";
+    Handle snap(CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0));
+    THREADENTRY32 te{sizeof te};
+    if (snap && Thread32First(snap.Get(), &te)) {
+        do {
+            if (te.th32OwnerProcessID != pid) continue;
+            char b[120];
+            std::snprintf(b, sizeof b, "  Thread %lu%s:\r\n", static_cast<unsigned long>(te.th32ThreadID), te.th32ThreadID == windowThreadId ? " (window)" : "");
+            s += b;
+            Handle thread(OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION, FALSE, te.th32ThreadID));
+            s += thread ? RemoteThreadStack(process.Get(), thread.Get()) : "    (could not be opened)\r\n";
+        } while (Thread32Next(snap.Get(), &te));
+    }
+    t_walk = nullptr;
+    return s;
+}
+} // namespace
+
+std::wstring WriteHangReport(DWORD pid, DWORD windowThreadId) {
+    if (g_folder.empty() || !PrepareFolder(g_folder)) return {};
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    wchar_t name[80];
+    std::swprintf(name, 80, L"\\NEXUS-%04u%02u%02u-%02u%02u%02u-%lu-hang", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond,
+                  static_cast<unsigned long>(pid));
+    std::wstring base = g_folder + name;
+    char b[512];
+    std::snprintf(b, sizeof b,
+                  "NEXUS (process %lu) stopped responding and was ended from a new NEXUS %s on %04u-%02u-%02u at %02u:%02u:%02u.\r\n"
+                  "Windows build %u, %s.\r\n\r\n",
+                  static_cast<unsigned long>(pid), NEXUS_VERSION_STR, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, WindowsBuild(),
+                  IsElevated() ? "running as administrator" : "running as a standard user");
+    std::string text = b;
+    // Stacks first: the dump and the wait chains take longer, and the threads are what matters.
+    text += RemoteStacks(pid, windowThreadId) + "\r\nWait chains:\r\n" + ToUtf8(DescribeWaitChains(pid)) + "\r\n";
+    DWORD dump = WriteProcessDump(pid, base + L".dmp", false);
+    if (dump != ERROR_SUCCESS) {
+        std::snprintf(b, sizeof b, "\r\nNo minidump (error %lu).\r\n", static_cast<unsigned long>(dump));
+        text += b;
+    }
+    SafeWriteGuard guard;
+    Handle f(CreateNew(guard, base + L".txt"));
+    DWORD written = 0;
+    if (!f || !WriteFile(f.Get(), text.data(), static_cast<DWORD>(text.size()), &written, nullptr)) return {};
+    return base + L".txt";
+}
+
+bool IsHangReport(const std::wstring& path) { return path.size() >= 9 && path.compare(path.size() - 9, 9, L"-hang.txt") == 0; }
 
 std::wstring WriteReport(EXCEPTION_POINTERS* ep) {
     // On a thread of its own: the crashed thread may have no stack left (stack overflow), and the

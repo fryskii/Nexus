@@ -8,6 +8,9 @@ Added
 - Crash reports list the crashed thread's call stack, and each release comes with a symbols file
   (`NEXUS-<version>-symbols-x64.zip`) that `scripts/symbolize.py` uses to turn the report into function names and source
   lines.
+- If NEXUS stops responding, starting it again (for example with Ctrl+Shift+Esc as the Task Manager replacement) offers to
+  end it and start a new one, or to open Windows Task Manager. Before ending it, NEXUS saves a report of where it was
+  stuck. Before, nothing happened.
 
 Changed
 - The crash, unexpected-shutdown and hardware-error checks read each event log once, newest first, and stop at the edge of
@@ -18,6 +21,7 @@ Changed
 Fixed
 - On a slow disk, the crash, shutdown and error counts and the Events and Crashes lists could stop short: when the event
   log took more than 2 seconds to return the next events, NEXUS took that as the end.
+- Starting NEXUS without administrator rights while an elevated NEXUS was open did not bring the open one to the front.
 
 ## 0.9.0-alpha.3 (2026-10-29)
 
