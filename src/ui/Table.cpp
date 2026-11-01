@@ -235,10 +235,16 @@ void Table::DrawImpl(Ui& ui, const Rect& r, TableSource& src) {
             // Metric pill: icon tile, total value and label.
             Rect pr{cr.x + 3, cr.y + 7, cr.w - 6, cr.h - 14};
             Color tint = c.tint.a > 0 ? c.tint : t.accent;
-            g.FillGradient(pr, 12.f, t.surfaceAlt.Mix(tint, t.dark ? 0.10f : 0.04f), t.surface);
-            g.StrokeRound(pr, 12.f, sorted ? tint.Alpha(0.75f) : hot && !gripHot ? tint.Alpha(0.5f) : t.panelBorder);
+            if (t.simple) {
+                // Task Manager style: plain cell, hover shade and a divider on the right.
+                if (hot && !gripHot) g.Fill({cr.x, cr.y, cr.w, cr.h}, t.surfaceHover);
+                g.Line(cr.R() - 0.5f, cr.y + 6, cr.R() - 0.5f, cr.B() - 6, t.divider);
+            } else {
+                g.FillGradient(pr, 12.f, t.surfaceAlt.Mix(tint, t.dark ? 0.10f : 0.04f), t.surface);
+                g.StrokeRound(pr, 12.f, sorted ? tint.Alpha(0.75f) : hot && !gripHot ? tint.Alpha(0.5f) : t.panelBorder);
+            }
             float tile = std::min(30.f, pr.h - 18);
-            bool showTile = pr.w >= 96;
+            bool showTile = pr.w >= 96 && !t.simple;
             Rect tr{pr.x + 9, pr.y + (pr.h - tile) / 2, tile, tile};
             if (showTile) g.IconTile(c.icon, tr, tint, t.dark);
             float tx = showTile ? tr.R() + 8 : pr.x + 8;
@@ -250,8 +256,13 @@ void Table::DrawImpl(Ui& ui, const Rect& r, TableSource& src) {
             // Plain column: the same panel as the metric pills, with the title only.
             float inset = pills ? 7.f : 4.f, rad = pills ? 12.f : 8.f;
             Rect pr{cr.x + 3, cr.y + inset, cr.w - 6, cr.h - 2 * inset};
-            g.FillGradient(pr, rad, t.surfaceAlt.Mix(t.accent, t.dark ? 0.06f : 0.02f), t.surface);
-            g.StrokeRound(pr, rad, sorted ? t.accent.Alpha(0.75f) : hot && !gripHot ? t.accent.Alpha(0.5f) : t.panelBorder);
+            if (t.simple) {
+                if (hot && !gripHot) g.Fill({cr.x, cr.y, cr.w, cr.h}, t.surfaceHover);
+                g.Line(cr.R() - 0.5f, cr.y + 6, cr.R() - 0.5f, cr.B() - 6, t.divider);
+            } else {
+                g.FillGradient(pr, rad, t.surfaceAlt.Mix(t.accent, t.dark ? 0.06f : 0.02f), t.surface);
+                g.StrokeRound(pr, rad, sorted ? t.accent.Alpha(0.75f) : hot && !gripHot ? t.accent.Alpha(0.5f) : t.panelBorder);
+            }
             Rect tr{pr.x + 6, pr.y, pr.w - 12, pr.h};
             if (sorted) { // room for the chevron
                 tr.w -= 12;

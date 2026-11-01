@@ -48,6 +48,13 @@ static void TestFormat() {
     CHECK_EQ_W(FormatPercent(12.4), L"12%");
     CHECK_EQ_W(FormatPercent(12.46, 1), L"12.5%");
     CHECK_EQ_W(FormatFreqMHz(3400), L"3.40 GHz");
+    CHECK(ParseRgb(L"2B7BFF", 7) == 0x2B7BFFu);
+    CHECK(ParseRgb(L"00000a", 7) == 0x00000Au);
+    CHECK(ParseRgb(L"FFFFFF", 7) == 0xFFFFFFu);
+    for (const wchar_t* bad : {L"", L"default", L"12345", L"1234567", L"12345G", L"-12345", L" 12345", L"0x1234"}) CHECK(ParseRgb(bad, 7) == 7u);
+    CHECK_EQ_W(FormatRgb(0x2B7BFF), L"2B7BFF");
+    CHECK_EQ_W(FormatRgb(0x00000A), L"00000A");
+    CHECK_EQ_W(FormatRgb(0xFF123456), L"123456");
     CHECK_EQ_W(FormatTemp(50, TempUnit::Fahrenheit), L"122 \u00B0F");
     CHECK_EQ_W(FormatUptime(90061), L"1:01:01:01");
     CHECK_EQ_W(FormatCount(1234567), L"1,234,567");

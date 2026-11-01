@@ -374,10 +374,14 @@ void App::ApplyTheme() {
     std::wstring acc = settings_.GetString("ui.accent", L"system");
     // "system" = NEXUS blue (default), "windows" = the Windows accent colour, otherwise RRGGBB.
     uint32_t rgb = acc == L"system" ? 0 : acc == L"windows" ? AccentFromWindows() : static_cast<uint32_t>(wcstoul(acc.c_str(), nullptr, 16));
+    ThemeStyle style = settings_.GetString("ui.style", L"nexus") == L"simple" ? ThemeStyle::Simple : ThemeStyle::Nexus;
+    // "default" = the style's own background, otherwise RRGGBB.
+    uint32_t bg = ParseRgb(settings_.GetString("ui.background", L"default"), kNoBackground);
+    Gfx::SetFlat(style == ThemeStyle::Simple);
     bool micaBefore = theme_.mica;
-    theme_ = Theme::Make(tm, rgb, micaBefore);
+    theme_ = Theme::Make(tm, rgb, micaBefore, style, bg);
     ApplyMica();
-    theme_ = Theme::Make(tm, rgb, theme_.mica);
+    theme_ = Theme::Make(tm, rgb, theme_.mica, style, bg);
     EnableDarkMenus(theme_.dark);
     if (search_) SetWindowTheme(search_, theme_.dark ? L"DarkMode_Explorer" : L"Explorer", nullptr);
     if (searchBrush_) DeleteObject(searchBrush_);

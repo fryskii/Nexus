@@ -21,6 +21,9 @@ std::wstring FormatUptime(uint64_t seconds);                          // "3:04:0
 std::wstring FormatDuration100ns(uint64_t t100ns);                    // "1:02:03"
 std::wstring FormatCount(uint64_t n);                                 // "12,345"
 std::wstring FormatHex(uint64_t v, int width = 0);
+// "RRGGBB" (exactly six hex digits, as stored in settings) -> 0x00RRGGBB; anything else -> fallback.
+uint32_t ParseRgb(const std::wstring& s, uint32_t fallback);
+std::wstring FormatRgb(uint32_t rgb);                                 // 0x2B7BFF -> "2B7BFF"
 std::wstring FormatLatencyMs(double ms);                              // "0.4 ms"
 std::wstring FormatFileTime(uint64_t fileTime100ns, bool utcToLocalHandled = true);
 

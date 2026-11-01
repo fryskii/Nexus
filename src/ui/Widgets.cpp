@@ -211,6 +211,11 @@ void Ui::Card(const Rect& r, bool hover) {
 
 void Ui::Panel(const Rect& r, Color tint, bool glow) {
     // Glass panel tinted towards `tint`, with a glowing edge in the same colour.
+    if (t.simple) { // plain card
+        g.FillRound(r, 4.f, t.card);
+        g.StrokeRound(r, 4.f, t.cardBorder);
+        return;
+    }
     Color top = t.dark ? t.card.Mix(tint, 0.16f) : t.card.Mix(tint, 0.05f);
     Color bottom = t.dark ? t.card.Mix(Color{0, 0, 0, t.card.a}, 0.25f) : t.card;
     g.FillGradient(r, 14.f, top, bottom);

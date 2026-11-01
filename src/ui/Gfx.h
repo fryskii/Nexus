@@ -113,8 +113,15 @@ public:
     static bool BundledFontAvailable();
     static const std::wstring& TextFamily();
     void SetTransparentBackground(bool on) { transparent_ = on; }
+    // Flat drawing for every Gfx in the process (the Simple style): no glows, gradients become
+    // their middle colour, and corners larger than 4 px shrink to 4 px (pills and circles keep
+    // their shape). UI thread only, like SetUiFont.
+    static void SetFlat(bool on) { flat_ = on; }
+    static bool Flat() { return flat_; }
 
 private:
+    static inline bool flat_ = false;
+    static float Corner(const Rect& r, float radius);
     bool CreateTarget();
     IDWriteTextFormat* Format(Font f, Align a, bool vcenter, bool wrap = false);
     ID2D1SolidColorBrush* Brush(Color c);

@@ -232,12 +232,20 @@ ID2D1SolidColorBrush* Gfx::Brush(Color c) {
 
 void Gfx::Fill(const Rect& r, Color c) { if (r.w > 0 && r.h > 0) rt_->FillRectangle(r.D2D(), Brush(c)); }
 
+float Gfx::Corner(const Rect& r, float rad) {
+    if (!flat_ || rad <= 4.f) return rad;
+    if (rad >= std::min(r.w, r.h) / 2 - 0.5f) return rad; // pill or circle: keep the shape
+    return 4.f;
+}
+
 void Gfx::FillRound(const Rect& r, float rad, Color c) {
     if (r.w <= 0 || r.h <= 0) return;
+    rad = Corner(r, rad);
     rt_->FillRoundedRectangle(D2D1::RoundedRect(r.D2D(), rad, rad), Brush(c));
 }
 
 void Gfx::StrokeRound(const Rect& r, float rad, Color c, float w) {
+    rad = Corner(r, rad);
     D2D1_RECT_F d{r.x + w / 2, r.y + w / 2, r.R() - w / 2, r.B() - w / 2};
     rt_->DrawRoundedRectangle(D2D1::RoundedRect(d, rad, rad), Brush(c), w);
 }
@@ -424,6 +432,7 @@ void Gfx::CachedLayer(int slot, uint64_t key, const Rect& r, const std::function
 
 void Gfx::FillGradient(const Rect& r, float radius, Color from, Color to, bool vertical) {
     if (r.w <= 0 || r.h <= 0) return;
+    if (flat_) { FillRound(r, radius, from.Mix(to, 0.5f)); return; }
     ID2D1GradientStopCollection* coll = Gradient(from, to);
     if (!coll) return;
     ComPtr<ID2D1LinearGradientBrush> br;
@@ -436,6 +445,7 @@ void Gfx::FillGradient(const Rect& r, float radius, Color from, Color to, bool v
 void Gfx::Glow(float cx, float cy, float rx, float ry, Color center) {
     // Stacked translucent ellipses: a smooth falloff that renders identically on every Direct2D
     // implementation (and avoids creating gradient resources every frame).
+    if (flat_) return;
     const int steps = 14;
     float a = center.a / steps * 1.6f;
     for (int i = 0; i < steps; ++i) {
@@ -447,6 +457,7 @@ void Gfx::Glow(float cx, float cy, float rx, float ry, Color center) {
 
 void Gfx::GlowStroke(const Rect& r, float radius, Color c, float strength) {
     // Layered translucent outlines approximate a blur without requiring Direct2D effects.
+    if (flat_) { StrokeRound(r, radius, c, 1.f); return; }
     for (int i = 3; i >= 1; --i) {
         float d = i * 1.6f;
         Rect o{r.x - d, r.y - d, r.w + 2 * d, r.h + 2 * d};
@@ -477,9 +488,10 @@ void Gfx::SeriesGradient(const Rect& r, const float* v, size_t n, size_t capacit
     s2->EndFigure(D2D1_FIGURE_END_OPEN);
     s1->Close();
     s2->Close();
-    ID2D1GradientStopCollection* coll = Gradient(fillTop, fillTop.Alpha(0));
+    ID2D1GradientStopCollection* coll = flat_ ? nullptr : Gradient(fillTop, fillTop.Alpha(0));
     ComPtr<ID2D1LinearGradientBrush> br;
-    if (coll && SUCCEEDED(rt_->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties({r.x, r.y}, {r.x, r.B()}), coll, br.Put())))
+    if (flat_) rt_->FillGeometry(fillGeo.Get(), Brush(fillTop.Alpha(fillTop.a * 0.45f))); // flat, like Task Manager's graphs
+    else if (coll && SUCCEEDED(rt_->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties({r.x, r.y}, {r.x, r.B()}), coll, br.Put())))
         rt_->FillGeometry(fillGeo.Get(), br.Get());
     rt_->DrawGeometry(lineGeo.Get(), Brush(line), width);
 }
@@ -502,7 +514,8 @@ void Gfx::Leaf(float x, float y, float s, Color c) {
 
 void Gfx::Logo(const Rect& r, Color from, Color to) {
     float rad = r.w * 0.24f;
-    FillGradient(r, rad, from, to, false);
+    if (flat_) FillRound(r, rad, from);
+    else FillGradient(r, rad, from, to, false);
     ComPtr<ID2D1PathGeometry> geo;
     ComPtr<ID2D1GeometrySink> sink;
     if (FAILED(factory_->CreatePathGeometry(geo.Put())) || FAILED(geo->Open(sink.Put()))) return;
@@ -601,6 +614,11 @@ void Gfx::DrawIcon(MetricIcon icon, const Rect& r, Color c, float w) {
 }
 
 void Gfx::IconTile(MetricIcon icon, const Rect& r, Color tint, bool dark) {
+    if (flat_) { // just the line icon in its colour
+        float p = r.w * 0.12f;
+        DrawIcon(icon, {r.x + p, r.y + p, r.w - 2 * p, r.h - 2 * p}, tint, std::max(1.2f, r.w / 20.f));
+        return;
+    }
     FillGradient(r, r.w * 0.28f, tint.Alpha(dark ? 0.55f : 0.22f), tint.Alpha(dark ? 0.22f : 0.10f));
     StrokeRound(r, r.w * 0.28f, tint.Alpha(dark ? 0.55f : 0.35f));
     float p = r.w * 0.2f;

@@ -3,6 +3,7 @@
 #include "data/Worker.h"
 #include "ui/pages/Common.h"
 
+#include <commdlg.h>
 #include <shellapi.h>
 
 namespace nx {
@@ -33,11 +34,100 @@ public:
 
         Section(ui, x, w, L"Appearance");
         {
+            bool simple = cfg.GetString("ui.style", L"nexus") == L"simple";
+            Rect c = Row(ui, x, w, L"Style",
+                         L"NEXUS: glowing, layered design. Simple: plain and flat, close to Windows Task Manager (no glows, gradients or "
+                         L"icon tiles). Choosing Simple also switches the font to Segoe UI; you can change it back below.");
+            int ns = ui.Tabs(Id("set.style"), {c.R() - 200, c.y + (c.h - 32) / 2, 200, 32}, {L"NEXUS", L"Simple"}, simple ? 1 : 0);
+            if (ns >= 0 && (ns == 1) != simple) {
+                cfg.SetString("ui.style", ns == 1 ? L"simple" : L"nexus");
+                if (ns == 1 && cfg.GetString("ui.font", L"inter") != L"segoe") {
+                    cfg.SetString("ui.font", L"segoe");
+                    Gfx::SetUiFont(L"segoe");
+                }
+                app.ApplyTheme();
+            }
+        }
+        const bool customBg = ParseRgb(cfg.GetString("ui.background", L"default"), kNoBackground) != kNoBackground;
+        {
             std::wstring theme = cfg.GetString("ui.theme", L"system");
             int sel = theme == L"light" ? 1 : theme == L"dark" ? 2 : 0;
-            Rect c = Row(ui, x, w, L"Theme", L"Follow Windows, or always use light or dark.");
-            int nt = ui.Tabs(Id("set.theme"), {c.R() - 270, c.y + (c.h - 32) / 2, 270, 32}, {L"System", L"Light", L"Dark"}, sel);
-            if (nt >= 0 && nt != sel) { cfg.SetString("ui.theme", nt == 1 ? L"light" : nt == 2 ? L"dark" : L"system"); app.ApplyTheme(); }
+            Rect c = Row(ui, x, w, L"Theme",
+                         customBg ? L"Light or dark text is picked to suit your background color right now. Choosing a theme here returns "
+                                    L"to the default background."
+                                  : L"Follow Windows, or always use light or dark.");
+            int nt = ui.Tabs(Id("set.theme"), {c.R() - 270, c.y + (c.h - 32) / 2, 270, 32}, {L"System", L"Light", L"Dark"}, customBg ? -1 : sel);
+            if (nt >= 0 && (nt != sel || customBg)) {
+                cfg.SetString("ui.theme", nt == 1 ? L"light" : nt == 2 ? L"dark" : L"system");
+                cfg.SetString("ui.background", L"default");
+                app.ApplyTheme();
+            }
+        }
+        {
+            Rect c = Row(ui, x, w, L"Background color",
+                         L"The color behind everything. NEXUS uses light text on dark colors and dark text on light colors, so text stays "
+                         L"readable. The last button picks any color.");
+            // 0 = default for the style and theme, then fixed colours, then "pick any colour".
+            static const uint32_t presets[] = {0x202020, 0xF3F3F3, 0x000000, 0xFFFFFF, 0x0C1B33, 0x2A1B3D, 0x10291C, 0xFFF8E7};
+            static const wchar_t* names[] = {L"Dark gray (Task Manager dark)", L"Light gray (Task Manager light)", L"Black", L"White",
+                                             L"Navy", L"Plum", L"Forest green", L"Cream"};
+            constexpr int kPresets = static_cast<int>(sizeof presets / sizeof presets[0]);
+            const uint32_t cur = ParseRgb(cfg.GetString("ui.background", L"default"), kNoBackground);
+            bool isPreset = false;
+            for (uint32_t p : presets) isPreset = isPreset || p == cur;
+            const int n = kPresets + 2;
+            float sx = c.R() - n * 30;
+            for (int i = 0; i < n; ++i) {
+                Rect sr{sx + i * 30, c.y + (c.h - 24) / 2, 24, 24};
+                WidgetId id = IdMix(Id("set.bg"), i);
+                bool hot = ui.Hit(id, sr);
+                const bool isDefault = i == 0, isCustom = i == n - 1;
+                uint32_t rgb = isDefault ? DefaultBackground(t.simple ? ThemeStyle::Simple : ThemeStyle::Nexus,
+                                                             cfg.GetString("ui.theme", L"system") == L"dark" ||
+                                                                 (cfg.GetString("ui.theme", L"system") == L"system" && IsWindowsDarkMode()))
+                             : isCustom ? (customBg && !isPreset ? cur : 0)
+                                        : presets[i - 1];
+                bool selected = isDefault ? !customBg : isCustom ? customBg && !isPreset : cur == presets[i - 1];
+                const bool emptyCustom = isCustom && !(customBg && !isPreset); // no custom colour chosen yet
+                g.FillRound(sr, 12.f, emptyCustom ? t.surface : Color::Hex(rgb));
+                // Thin ring so white on white or black on black still shows.
+                g.StrokeRound(sr, 12.f, t.text.Alpha(0.25f), 1.f);
+                Color mark = emptyCustom ? t.text : WantsDarkPalette(rgb) ? Color{1, 1, 1, 1} : Color::Hex(0x1A1A1A);
+                if (isDefault) g.Text(L"A", sr, Font::Caption, mark, Align::Center);
+                if (isCustom) { // "+": pick any colour
+                    float cx = sr.x + 12, cy = sr.y + 12;
+                    g.Line(cx - 5, cy, cx + 5, cy, mark, 1.4f);
+                    g.Line(cx, cy - 5, cx, cy + 5, mark, 1.4f);
+                }
+                if (selected || hot) g.StrokeRound(sr.Inset(-3), 14.f, selected ? t.text : t.textTertiary, 2.f);
+                ui.Tooltip(id, isDefault ? L"Automatic: the default background for this style and theme"
+                               : isCustom ? L"Pick any color…"
+                                          : names[i - 1]);
+                if (!ui.Clicked(id)) continue;
+                if (isDefault) {
+                    cfg.SetString("ui.background", L"default");
+                    app.ApplyTheme();
+                } else if (!isCustom) {
+                    cfg.SetString("ui.background", FormatRgb(presets[i - 1]));
+                    app.ApplyTheme();
+                } else {
+                    uint32_t start = customBg ? cur : DefaultBackground(t.simple ? ThemeStyle::Simple : ThemeStyle::Nexus, t.dark);
+                    ui.Defer([this, start] {
+                        static COLORREF custom[16] = {};
+                        CHOOSECOLORW cc{};
+                        cc.lStructSize = sizeof cc;
+                        cc.hwndOwner = app.Hwnd();
+                        cc.rgbResult = RGB((start >> 16) & 0xFF, (start >> 8) & 0xFF, start & 0xFF);
+                        cc.lpCustColors = custom;
+                        cc.Flags = CC_FULLOPEN | CC_RGBINIT | CC_ANYCOLOR;
+                        if (!ChooseColorW(&cc)) return; // cancelled
+                        uint32_t picked = (static_cast<uint32_t>(GetRValue(cc.rgbResult)) << 16) |
+                                          (static_cast<uint32_t>(GetGValue(cc.rgbResult)) << 8) | GetBValue(cc.rgbResult);
+                        app.Config().SetString("ui.background", FormatRgb(picked));
+                        app.ApplyTheme();
+                    });
+                }
+            }
         }
         {
             bool inter = cfg.GetString("ui.font", L"inter") != L"segoe";

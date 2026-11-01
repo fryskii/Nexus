@@ -106,6 +106,19 @@ std::wstring FormatHex(uint64_t v, int width) {
     return buf;
 }
 
+uint32_t ParseRgb(const std::wstring& s, uint32_t fallback) {
+    if (s.size() != 6) return fallback;
+    uint32_t v = 0;
+    for (wchar_t c : s) {
+        int d = c >= L'0' && c <= L'9' ? c - L'0' : c >= L'a' && c <= L'f' ? c - L'a' + 10 : c >= L'A' && c <= L'F' ? c - L'A' + 10 : -1;
+        if (d < 0) return fallback;
+        v = v << 4 | static_cast<uint32_t>(d);
+    }
+    return v;
+}
+
+std::wstring FormatRgb(uint32_t rgb) { return FormatHex(rgb & 0xFFFFFF, 6).substr(2); }
+
 std::wstring FormatLatencyMs(double ms) {
     if (ms < 0) ms = 0;
     if (ms < 10) return Printf(L"%.1f ms", ms);

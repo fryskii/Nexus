@@ -107,7 +107,7 @@ std::wstring App::GreetingName() const {
 void App::DrawBackground(float W, float H) {
     // The gradient and glows only change with size and theme, so they are painted once into a
     // cached layer (about 40 large translucent fills that would otherwise be redrawn every frame).
-    uint64_t key = 1469598103934665603ULL;
+    uint64_t key = theme_.simple ? 0x51D1E5ULL : 1469598103934665603ULL;
     for (const Color& c : {theme_.bgTop, theme_.bgBottom, theme_.glowA, theme_.glowB})
         for (float v : {c.r, c.g, c.b, c.a}) {
             uint32_t bits;
@@ -180,14 +180,18 @@ void App::DrawNav(Ui& ui, Rect r) {
         WidgetId id = IdMix(Id("nav.item"), static_cast<int>(e.id));
         bool hot = ui.Hit(id, ir);
         bool sel = current_ == e.id;
-        if (sel) {
+        if (sel && t.simple) {
+            // Task Manager style: a plain highlight and a short accent bar on the left.
+            g.FillRound(ir, 4.f, t.text.Alpha(hot ? 0.09f : 0.07f));
+            g.FillRound({ir.x + 2, ir.y + ir.h / 2 - 8, 3, 16}, 1.5f, t.accent);
+        } else if (sel) {
             if (t.dark) g.Glow(ir.x + ir.w * 0.25f, ir.y + ir.h / 2, ir.w * 0.55f, ir.h, t.accent.Alpha(0.08f));
             g.FillGradient(ir, 12.f, t.accent.Alpha(t.dark ? 0.42f : 0.20f), t.accent.Alpha(t.dark ? 0.12f : 0.06f), false);
             g.GlowStroke(ir, 12.f, t.accent.Alpha(t.dark ? 0.60f : 0.45f), t.dark ? 0.8f : 0.4f);
         } else if (hot) {
             g.FillRound(ir, 12.f, t.surfaceHover);
         }
-        Color fg = sel ? (t.dark ? Color{1, 1, 1, 1} : t.accentText) : t.text;
+        Color fg = sel && !t.simple ? (t.dark ? Color{1, 1, 1, 1} : t.accentText) : t.text;
         g.Glyph(e.glyph, {ir.x + 12, ir.y, 28, ir.h}, Font::IconLarge, fg);
         if (!navCollapsed_) g.Text(e.name, {ir.x + 52, ir.y, ir.w - 56, ir.h}, sel ? Font::BodySemi : Font::Body, fg);
         else ui.Tooltip(id, e.name);
@@ -393,6 +397,7 @@ void App::DrawInsights(Ui& ui, Rect r) {
         WidgetId id = IdMix(Id("rail.card"), i);
         bool hot = ui.Hit(id, cr);
         ui.Panel(cr, hot ? c.tint.Mix(Color{1, 1, 1, 1}, 0.15f) : c.tint, true);
+        if (t.simple && hot) g.FillRound(cr, 4.f, t.surfaceHover);
         // Graph first so the text sits on top of it.
         if (c.data && c.data->Size() > 1) {
             static thread_local std::vector<float> buf;
@@ -464,6 +469,7 @@ void App::DrawInsights(Ui& ui, Rect r) {
             SetSelfEfficiency(!SelfEfficiency());
         if (row("qa.dark", L"Dark mode", L"Switch between dark and light themes.", t.dark, 1)) {
             settings_.SetString("ui.theme", t.dark ? L"light" : L"dark");
+            settings_.SetString("ui.background", L"default"); // a chosen background would decide light or dark again
             ui.Defer([this] { ApplyTheme(); });
         }
         bool top = settings_.GetBool("window.topmost", false);

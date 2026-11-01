@@ -48,6 +48,13 @@ Implemented from the reference mockup:
 - Insights rail with tinted metric cards, system information and quick actions (NEXUS EcoQoS efficiency mode, dark mode, always on top, details).
 - Accent: NEXUS blue default, Windows accent or custom swatches. Mica setting removed (custom background).
 
+Simple style and background color (2026-10-31): `ui.style=simple` makes `Gfx` flat process-wide (`Gfx::SetFlat`: no glows,
+gradients drawn as their middle colour, corners over 4 px become 4 px except pills/circles, icon tiles become plain icons)
+and `Theme` builds a neutral Task Manager-like palette around the window colour (`MakeSimple`). Table headers, the sidebar
+selection and the insights cards have Simple variants. `ui.background=RRGGBB` (presets or `ChooseColorW`) works in both
+styles; `WantsDarkPalette` picks light or dark text by WCAG contrast. Checked with window screenshots on this PC (dark,
+light, navy and plum backgrounds; Processes, Performance, Overview, Settings); not yet clicked through by hand.
+
 Verified only under Wine, which has no Segoe Fluent icon font (glyphs show as boxes) and seems to ignore gradient-stop alpha.
 To check on Windows 11: icon glyphs, gradient transparency, snap layouts, maximized frame insets, per-monitor DPI.
 
