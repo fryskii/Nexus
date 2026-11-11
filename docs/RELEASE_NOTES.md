@@ -1,28 +1,30 @@
-# NEXUS 0.9.0-alpha.4
+# NEXUS 0.9.0-alpha.5
 
 A test build of NEXUS, a Task Manager replacement for Windows 11, for testers and contributors. Expect rough edges, and
 please report problems with the **Bug report** form under Issues.
 
 ## Downloads
 
-- `NEXUS-0.9.0-alpha.4-setup-x64.exe`: installer
-- `NEXUS-0.9.0-alpha.4-portable-x64.zip`: no install; unzip anywhere and run `NEXUS.exe`
-- `NEXUS-0.9.0-alpha.4-symbols-x64.zip`: only for reading crash reports (developers); not needed to run NEXUS
+- `NEXUS-0.9.0-alpha.5-setup-x64.exe`: installer
+- `NEXUS-0.9.0-alpha.5-portable-x64.zip`: no install; unzip anywhere and run `NEXUS.exe`
+- `NEXUS-0.9.0-alpha.5-symbols-x64.zip`: only for reading crash reports (developers); not needed to run NEXUS
 - `SHA256SUMS.txt`: checksums
 
 The files are not code-signed yet, so Windows SmartScreen warns ("Windows protected your PC"). Choose
 **More info → Run anyway** if you trust this source.
 
-## What changed since alpha.3
+## What changed since alpha.4
 
-- **Less disk activity at startup.** NEXUS's check for recent crashes, unexpected shutdowns and hardware errors read
-  whole Windows event logs as soon as it started. It now reads only the time window it needs, a minute after launch (or
-  when System diagnostics is opened): on a test PC about 4 MB instead of 18 MB. On a slow disk the counts and the Events
-  and Crashes lists could also stop short; fixed.
-- **If NEXUS stops responding**, starting it again (for example with Ctrl+Shift+Esc when it replaces Task Manager) now
-  offers to end it and start a new one, or to open Windows Task Manager. Before, nothing happened.
-- **Better crash and hang reports.** A crash report now includes where in NEXUS the crash happened (the call stack), and
-  when a stuck NEXUS is ended this way, a report of where it was stuck is saved first.
+- **A Simple style.** Settings → Appearance → Style → *Simple* draws NEXUS plain and flat and laid out like Windows Task
+  Manager: a solid background, no glows or gradients, no insights panel, one plain process list with tighter rows and
+  Task Manager's yellow usage cells, and the Segoe UI font. It is off by default; the layered *NEXUS* look stays the
+  default.
+- **Your own background color.** Settings → Appearance → Background color has presets and a "+" button for any color, in
+  either style. NEXUS switches to light or dark text, whichever is easier to read on that color. Choosing a theme
+  returns to the default background.
+
+Both are new and were checked with screenshots only (see "Not tested yet"). If text is hard to read on a color, or
+something looks out of place in the Simple style, a screenshot in a bug report helps most.
 
 Earlier changes are in CHANGELOG.md.
 
@@ -43,6 +45,8 @@ Monitor (Start, type "reliability") for that time helps.
 
 ## Not tested yet
 
+- The Simple style and background colors by hand: only screenshots of Processes, Performance, Overview and Settings
+  were checked (dark, light and two custom backgrounds)
 - Settings persistence, portable mode, start with Windows, tray, mini monitor
 - Replacing Task Manager (leave this off for now)
 - The installer's upgrade and uninstall paths

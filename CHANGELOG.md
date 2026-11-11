@@ -2,7 +2,7 @@
 
 Test builds are on the [Releases page](https://github.com/fryskii/Nexus/releases).
 
-## Unreleased
+## 0.9.0-alpha.5 (2026-11-11)
 
 Added
 - Settings → Appearance → Style: *Simple* (off by default) draws NEXUS plain and flat and laid out like Windows Task
